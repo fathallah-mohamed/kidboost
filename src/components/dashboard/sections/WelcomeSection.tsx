@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ProgressSteps } from "./ProgressSteps";
 import { PriorityTasks } from "./PriorityTasks";
 import { WeeklyOverview } from "./WeeklyOverview";
+import { WeeklyBalance } from "./WeeklyBalance";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Zap } from "lucide-react";
 import { useQuickPlan } from "../meal-planner/hooks/useQuickPlan";
@@ -89,12 +90,15 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6">
+      <div className="space-y-6">
         <ProgressSteps onSectionChange={onSectionChange} />
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <PriorityTasks />
           <WeeklyOverview />
         </div>
+
+        <WeeklyBalance />
       </div>
     </div>
   );
