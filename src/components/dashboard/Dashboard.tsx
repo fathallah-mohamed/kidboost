@@ -4,8 +4,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DashboardHeader } from './layout/DashboardHeader';
-import { DashboardContent } from './layout/DashboardContent';
-import { CategoriesGrid } from './categories/CategoriesGrid';
+import { WelcomeSection } from './sections/WelcomeSection';
 
 interface DashboardProps {
   session: Session;
@@ -37,13 +36,16 @@ export const Dashboard = ({ session }: DashboardProps) => {
     }
   };
 
+  const handleSectionChange = (section: string) => {
+    navigate(`/dashboard/${section}`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader handleLogout={handleLogout} />
       {location.pathname === '/dashboard' || location.pathname === '/dashboard/overview' ? (
         <div className="container mx-auto px-4 py-8">
-          <h2 className="text-2xl font-bold mb-6">Bienvenue sur Kiboost</h2>
-          <CategoriesGrid onSectionChange={(section) => navigate(`/dashboard/${section}`)} />
+          <WelcomeSection userId={session.user.id} onSectionChange={handleSectionChange} />
         </div>
       ) : (
         <Outlet />
