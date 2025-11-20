@@ -5,6 +5,8 @@ import { ProgressSteps } from "./ProgressSteps";
 import { PriorityTasks } from "./PriorityTasks";
 import { WeeklyOverview } from "./WeeklyOverview";
 import { WeeklyBalance } from "./WeeklyBalance";
+import { QuickStartGuide } from "./QuickStartGuide";
+import { ActionCards } from "./ActionCards";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Zap } from "lucide-react";
 import { useQuickPlan } from "../meal-planner/hooks/useQuickPlan";
@@ -17,6 +19,7 @@ interface WelcomeSectionProps {
 export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps) => {
   const [username, setUsername] = useState<string>("");
   const [childrenNames, setChildrenNames] = useState<string[]>([]);
+  const [hasChildren, setHasChildren] = useState(false);
   const { generateQuickPlan, loading } = useQuickPlan(userId);
 
   useEffect(() => {
@@ -30,11 +33,11 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
       const { data: children } = await supabase
         .from('children_profiles')
         .select('name')
-        .eq('profile_id', userId)
-        .limit(2);
+        .eq('profile_id', userId);
       
-      if (children) {
-        setChildrenNames(children.map(c => c.name));
+      if (children && children.length > 0) {
+        setHasChildren(true);
+        setChildrenNames(children.slice(0, 2).map(c => c.name));
       }
     };
     fetchUserData();
@@ -50,38 +53,53 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     return `Semaine du ${start.getDate()} au ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`;
   };
 
+  const handleActionSelect = (action: string) => {
+    if (action === "quick-plan") {
+      generateQuickPlan();
+    } else {
+      onSectionChange(action);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header with mascot */}
-      <Card className="p-6 bg-gradient-to-r from-primary/10 via-accent/10 to-pastel-purple relative overflow-hidden">
+      {/* Header simplifié */}
+      <Card className="p-6 bg-gradient-to-r from-primary/10 via-accent/10 to-pastel-purple/10 relative overflow-hidden border-2 border-primary/20">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex-1">
             <h2 className="text-3xl font-bold mb-2 flex items-center gap-2">
               Bonjour {username} 👋
             </h2>
-            <p className="text-muted-foreground text-lg">
-              {childrenNames.length > 0 
-                ? `Planifions ensemble les repas de ${childrenNames.join(' et ')} cette semaine.`
-                : "Planifions ensemble les repas de vos enfants cette semaine."}
-            </p>
-            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-white/80 rounded-full text-sm font-medium">
+            {childrenNames.length > 0 ? (
+              <p className="text-muted-foreground text-lg">
+                Planifions ensemble les repas de {childrenNames.join(' et ')} cette semaine !
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-lg">
+                Commencez par créer les profils de vos enfants 🎈
+              </p>
+            )}
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-white/80 rounded-full text-sm font-medium shadow-sm">
               <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
               {getCurrentWeek()}
             </div>
           </div>
-          <Button 
-            onClick={generateQuickPlan}
-            disabled={loading}
-            size="lg"
-            className="whitespace-nowrap group hover:scale-105 transition-all duration-300 shadow-lg"
-          >
-            {loading ? (
-              <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Zap className="w-4 h-4 mr-2 group-hover:text-yellow-400" />
-            )}
-            Planning express de la semaine
-          </Button>
+          
+          {hasChildren && (
+            <Button 
+              onClick={generateQuickPlan}
+              disabled={loading}
+              size="lg"
+              className="whitespace-nowrap group hover:scale-105 transition-all duration-300 shadow-lg"
+            >
+              {loading ? (
+                <Sparkles className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Zap className="w-4 h-4 mr-2 group-hover:text-yellow-400" />
+              )}
+              Planning express de la semaine
+            </Button>
+          )}
         </div>
         
         {/* Floating mascot */}
@@ -90,6 +108,18 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
         </div>
       </Card>
 
+      {/* Guide de démarrage pour nouveaux utilisateurs */}
+      {!hasChildren && <QuickStartGuide onSelectStep={onSectionChange} />}
+
+      {/* Actions rapides */}
+      {hasChildren && (
+        <div className="space-y-3">
+          <h3 className="text-xl font-bold">Actions rapides</h3>
+          <ActionCards onSelectAction={handleActionSelect} />
+        </div>
+      )}
+
+      {/* Contenu principal */}
       <div className="space-y-6">
         <ProgressSteps onSectionChange={onSectionChange} />
         
