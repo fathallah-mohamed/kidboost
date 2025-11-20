@@ -1,37 +1,50 @@
-import { Heart, Calendar, Salad } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Heart, Calendar, ShoppingBag, Users } from "lucide-react";
+import { BenefitCard } from "./BenefitCard";
 
-const features = [
+const benefits = [
   {
-    icon: <Heart className="w-12 h-12 text-primary" />,
+    icon: Heart,
     title: "Recettes personnalisées",
-    description: "Des recettes adaptées aux goûts et besoins de vos enfants."
+    subtitle: "Adaptées à l'âge, aux goûts et aux contraintes (allergies, halal, etc.)."
   },
   {
-    icon: <Calendar className="w-12 h-12 text-primary" />,
-    title: "Planification facile",
-    description: "Un calendrier interactif pour organiser vos repas de la semaine."
+    icon: Calendar,
+    title: "Planning super simple",
+    subtitle: "Un calendrier clair des repas et goûters pour toute la semaine."
   },
   {
-    icon: <Salad className="w-12 h-12 text-primary" />,
-    title: "Nutrition équilibrée",
-    description: "Des repas sains pour toute la famille, en quelques clics."
+    icon: ShoppingBag,
+    title: "Courses sans stress",
+    subtitle: "Liste de courses auto-générée, prête à cocher au supermarché."
+  },
+  {
+    icon: Users,
+    title: "Enfants impliqués",
+    subtitle: "Choisissez ensemble les idées de recettes via une interface amusante."
   }
 ];
 
 export const FeaturesSection = () => {
   return (
-    <section className="container mx-auto px-4 py-16 bg-white/50">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {features.map((feature, index) => (
-          <Card 
+    <section className="container mx-auto px-4 py-16">
+      <div className="text-center mb-12">
+        <h2 className="text-3xl md:text-4xl font-bold mb-4">
+          Pourquoi les parents adorent KiBoost
+        </h2>
+        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+          Tout ce dont vous avez besoin pour des repas réussis en famille
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {benefits.map((benefit, index) => (
+          <BenefitCard
             key={index}
-            className="p-6 text-center hover:shadow-lg transition-shadow animate-fade-in [animation-delay:600ms] bg-white/80 backdrop-blur-sm"
-          >
-            <div className="mb-4 flex justify-center">{feature.icon}</div>
-            <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-            <p className="text-gray-600">{feature.description}</p>
-          </Card>
+            icon={benefit.icon}
+            title={benefit.title}
+            subtitle={benefit.subtitle}
+            delay={`${index * 100}ms`}
+          />
         ))}
       </div>
     </section>

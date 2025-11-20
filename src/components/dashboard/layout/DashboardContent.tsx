@@ -7,6 +7,7 @@ import { ShoppingList } from '../ShoppingList';
 import { FavoriteRecipes } from '../favorites/FavoriteRecipes';
 import { CategoriesGrid } from '../categories/CategoriesGrid';
 import { PlannerPage } from '../planner/PlannerPage';
+import { ActivityCenter } from '../activity-center/ActivityCenter';
 
 interface DashboardContentProps {
   session: Session;
@@ -29,7 +30,7 @@ export const DashboardContent = ({
           />
         );
       case 'categories':
-        return <CategoriesGrid />;
+        return <ActivityCenter />;
       case 'recipes':
         return <RecipeGenerator onSectionChange={setActiveSection} />;
       case 'planner':
