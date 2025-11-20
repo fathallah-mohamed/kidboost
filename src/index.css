@@ -34,6 +34,22 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
 
+    /* Couleurs pastel supplémentaires pour KiBoost */
+    --pastel-green: 142 76% 88%;
+    --pastel-green-foreground: 142 76% 20%;
+    
+    --pastel-blue: 210 100% 92%;
+    --pastel-blue-foreground: 210 100% 25%;
+    
+    --pastel-yellow: 48 100% 90%;
+    --pastel-yellow-foreground: 48 100% 25%;
+    
+    --pastel-purple: 280 76% 92%;
+    --pastel-purple-foreground: 280 76% 25%;
+    
+    --success: 142 76% 75%;
+    --success-foreground: 142 76% 20%;
+
     --radius: 1rem;
   }
 
