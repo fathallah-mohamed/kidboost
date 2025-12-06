@@ -18,10 +18,10 @@ export const NutritionBalance = ({
   const vegetablesPercent = total > 0 ? Math.round((vegetables / total) * 100) : 0;
 
   const data = [
-    { name: "Légumes", value: vegetables, color: "hsl(var(--pastel-green))" },
-    { name: "Protéines", value: proteins, color: "hsl(var(--primary))" },
-    { name: "Féculents", value: starches, color: "hsl(var(--pastel-yellow))" },
-    { name: "Laitiers", value: dairy, color: "hsl(var(--pastel-blue))" },
+    { name: "Légumes", value: vegetables || 1, color: "hsl(var(--pastel-green))" },
+    { name: "Protéines", value: proteins || 1, color: "hsl(var(--primary))" },
+    { name: "Féculents", value: starches || 1, color: "hsl(var(--pastel-yellow))" },
+    { name: "Laitiers", value: dairy || 1, color: "hsl(var(--pastel-blue))" },
   ];
 
   const getBalanceMessage = () => {
@@ -33,37 +33,33 @@ export const NutritionBalance = ({
     ));
 
     if (overallBalance >= 80) {
-      return { text: "Semaine bien équilibrée", emoji: "🎉", color: "text-pastel-green-foreground" };
+      return { text: "Bien équilibré 🎉", color: "text-pastel-green-foreground" };
     }
     if (vegetablesPercent < 20) {
-      return { text: "Les légumes sont faibles cette semaine", emoji: "🥬", color: "text-destructive" };
+      return { text: "Légumes à renforcer 🥬", color: "text-destructive" };
     }
     if (overallBalance >= 50) {
-      return { text: `Semaine équilibrée à ${overallBalance}%`, emoji: "👍", color: "text-pastel-yellow-foreground" };
+      return { text: `Équilibré à ${overallBalance}%`, color: "text-pastel-yellow-foreground" };
     }
-    return { text: "Équilibre nutritionnel à améliorer", emoji: "💡", color: "text-muted-foreground" };
+    return { text: "À améliorer 💡", color: "text-muted-foreground" };
   };
 
   const message = getBalanceMessage();
 
   return (
-    <Card className="p-4 space-y-3">
+    <Card className="p-3 space-y-2">
       <h3 className="font-bold text-sm">Équilibre nutritionnel</h3>
 
-      <p className={`text-sm font-medium ${message.color}`}>
-        {message.emoji} {message.text}
-      </p>
-
-      <div className="flex items-center gap-4">
-        <div className="w-24 h-24">
+      <div className="flex items-center gap-3">
+        <div className="w-16 h-16 flex-shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius={25}
-                outerRadius={40}
+                innerRadius={18}
+                outerRadius={30}
                 paddingAngle={2}
                 dataKey="value"
               >
@@ -75,16 +71,21 @@ export const NutritionBalance = ({
           </ResponsiveContainer>
         </div>
 
-        <div className="flex-1 grid grid-cols-2 gap-2">
-          {data.map((item) => (
-            <div key={item.name} className="flex items-center gap-2">
-              <div
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: item.color }}
-              />
-              <span className="text-xs text-muted-foreground">{item.name}</span>
-            </div>
-          ))}
+        <div className="flex-1 space-y-1">
+          <p className={`text-sm font-medium ${message.color}`}>
+            {message.text}
+          </p>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+            {data.map((item) => (
+              <div key={item.name} className="flex items-center gap-1">
+                <div
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-[10px] text-muted-foreground truncate">{item.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </Card>

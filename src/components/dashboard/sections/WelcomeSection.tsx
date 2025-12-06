@@ -278,11 +278,11 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   }
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-3 animate-fade-in pb-4">
       {/* Smart welcome + Child Profile Badge */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold">
+          <h1 className="text-lg md:text-xl font-bold">
             Bonjour {username || "Parent"} 👋
           </h1>
           <p className="text-sm text-muted-foreground">
