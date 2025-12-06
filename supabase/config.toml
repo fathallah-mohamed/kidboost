@@ -1,1 +1,13 @@
 project_id = "qqmwyaazsozedazrvmfp"
+
+[functions.generate-recipe]
+verify_jwt = false
+
+[functions.generate-recipe-image]
+verify_jwt = false
+
+[functions.analyze-leftovers]
+verify_jwt = false
+
+[functions.generate-daily-meal]
+verify_jwt = false
