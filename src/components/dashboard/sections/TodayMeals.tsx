@@ -1,11 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, Eye, RefreshCw, Plus, Cookie, Utensils, Sandwich } from "lucide-react";
+import { Clock, Eye, RefreshCw, Plus, Cookie, Utensils, Sandwich, Loader2 } from "lucide-react";
 
 interface MealCardProps {
   type: "snack" | "dinner" | "lunchbox";
   recipeName: string | null;
   prepTime?: number;
+  generating?: boolean;
   onView: () => void;
   onReplace: () => void;
   onAddToList: () => void;
@@ -32,7 +33,7 @@ const mealConfig = {
   },
 };
 
-const MealCard = ({ type, recipeName, prepTime, onView, onReplace, onAddToList }: MealCardProps) => {
+const MealCard = ({ type, recipeName, prepTime, generating, onView, onReplace, onAddToList }: MealCardProps) => {
   const config = mealConfig[type];
   const Icon = config.icon;
 
@@ -45,7 +46,12 @@ const MealCard = ({ type, recipeName, prepTime, onView, onReplace, onAddToList }
         
         <div className="flex-1 min-w-0">
           <span className="text-[10px] font-semibold text-muted-foreground block leading-tight">{config.label}</span>
-          {recipeName ? (
+          {generating ? (
+            <div className="flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="text-xs text-muted-foreground">Génération...</span>
+            </div>
+          ) : recipeName ? (
             <div className="flex items-center gap-1">
               <h4 className="font-bold text-xs truncate">{recipeName}</h4>
               {prepTime && (
@@ -60,22 +66,24 @@ const MealCard = ({ type, recipeName, prepTime, onView, onReplace, onAddToList }
           )}
         </div>
 
-        {recipeName ? (
-          <div className="flex gap-0.5">
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onView}>
-              <Eye className="w-3 h-3" />
+        {!generating && (
+          recipeName ? (
+            <div className="flex gap-0.5">
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onView}>
+                <Eye className="w-3 h-3" />
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onReplace}>
+                <RefreshCw className="w-3 h-3" />
+              </Button>
+              <Button size="sm" variant="secondary" className="h-6 w-6 p-0" onClick={onAddToList}>
+                <Plus className="w-3 h-3" />
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onReplace}>
+              Générer
             </Button>
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onReplace}>
-              <RefreshCw className="w-3 h-3" />
-            </Button>
-            <Button size="sm" variant="secondary" className="h-6 w-6 p-0" onClick={onAddToList}>
-              <Plus className="w-3 h-3" />
-            </Button>
-          </div>
-        ) : (
-          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onReplace}>
-            Générer
-          </Button>
+          )
         )}
       </div>
     </Card>
@@ -84,10 +92,11 @@ const MealCard = ({ type, recipeName, prepTime, onView, onReplace, onAddToList }
 
 interface TodayMealsProps {
   childName: string;
-  snack: { name: string | null; prepTime?: number };
-  dinner: { name: string | null; prepTime?: number };
-  lunchbox?: { name: string | null; prepTime?: number };
+  snack: { name: string | null; prepTime?: number; recipeId?: string };
+  dinner: { name: string | null; prepTime?: number; recipeId?: string };
+  lunchbox?: { name: string | null; prepTime?: number; recipeId?: string };
   showLunchbox: boolean;
+  generating?: string | null;
   onViewRecipe: (type: string) => void;
   onReplaceRecipe: (type: string) => void;
   onAddToList: (type: string) => void;
@@ -99,6 +108,7 @@ export const TodayMeals = ({
   dinner,
   lunchbox,
   showLunchbox,
+  generating,
   onViewRecipe,
   onReplaceRecipe,
   onAddToList,
@@ -114,6 +124,7 @@ export const TodayMeals = ({
           type="snack"
           recipeName={snack.name}
           prepTime={snack.prepTime}
+          generating={generating === 'snack'}
           onView={() => onViewRecipe("snack")}
           onReplace={() => onReplaceRecipe("snack")}
           onAddToList={() => onAddToList("snack")}
@@ -123,6 +134,7 @@ export const TodayMeals = ({
           type="dinner"
           recipeName={dinner.name}
           prepTime={dinner.prepTime}
+          generating={generating === 'dinner'}
           onView={() => onViewRecipe("dinner")}
           onReplace={() => onReplaceRecipe("dinner")}
           onAddToList={() => onAddToList("dinner")}
@@ -133,6 +145,7 @@ export const TodayMeals = ({
             type="lunchbox"
             recipeName={lunchbox.name}
             prepTime={lunchbox.prepTime}
+            generating={generating === 'lunchbox'}
             onView={() => onViewRecipe("lunchbox")}
             onReplace={() => onReplaceRecipe("lunchbox")}
             onAddToList={() => onAddToList("lunchbox")}
