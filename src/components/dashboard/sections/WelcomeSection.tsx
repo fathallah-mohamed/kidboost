@@ -1,15 +1,31 @@
-import { Card } from "@/components/ui/card";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ProgressSteps } from "./ProgressSteps";
-import { PriorityTasks } from "./PriorityTasks";
-import { WeeklyOverview } from "./WeeklyOverview";
-import { WeeklyBalance } from "./WeeklyBalance";
-import { QuickStartGuide } from "./QuickStartGuide";
-import { ActionCards } from "./ActionCards";
-import { Button } from "@/components/ui/button";
-import { Sparkles, Zap } from "lucide-react";
 import { useQuickPlan } from "../meal-planner/hooks/useQuickPlan";
+import { ChildProfileBadge } from "./ChildProfileBadge";
+import { TodayMeals } from "./TodayMeals";
+import { TodoNow } from "./TodoNow";
+import { WeekProgress } from "./WeekProgress";
+import { CompactActionCards } from "./CompactActionCards";
+import { MiniCalendar } from "./MiniCalendar";
+import { NutritionBalance } from "./NutritionBalance";
+import { QuickStartGuide } from "./QuickStartGuide";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
+
+interface Child {
+  id: string;
+  name: string;
+  birth_date: string;
+  allergies: string[] | null;
+  meal_objectives: string[] | null;
+}
 
 interface WelcomeSectionProps {
   userId: string;
@@ -17,41 +33,114 @@ interface WelcomeSectionProps {
 }
 
 export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps) => {
+  const navigate = useNavigate();
   const [username, setUsername] = useState<string>("");
-  const [childrenNames, setChildrenNames] = useState<string[]>([]);
-  const [hasChildren, setHasChildren] = useState(false);
+  const [children, setChildren] = useState<Child[]>([]);
+  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
+  const [showChildSelector, setShowChildSelector] = useState(false);
+  const [plannedDays, setPlannedDays] = useState<string[]>([]);
+  const [todayMeals, setTodayMeals] = useState({
+    snack: { name: null as string | null, prepTime: undefined as number | undefined },
+    dinner: { name: null as string | null, prepTime: undefined as number | undefined },
+    lunchbox: { name: null as string | null, prepTime: undefined as number | undefined },
+  });
+  
   const { generateQuickPlan, loading } = useQuickPlan(userId);
 
+  // Fetch user data and children
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchData = async () => {
+      // Get username
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email) {
         setUsername(user.email.split("@")[0]);
       }
 
-      // Fetch children names
-      const { data: children } = await supabase
+      // Fetch children
+      const { data: childrenData } = await supabase
         .from('children_profiles')
-        .select('name')
+        .select('id, name, birth_date, allergies, meal_objectives')
         .eq('profile_id', userId);
-      
-      if (children && children.length > 0) {
-        setHasChildren(true);
-        setChildrenNames(children.slice(0, 2).map(c => c.name));
+
+      if (childrenData && childrenData.length > 0) {
+        setChildren(childrenData);
+        setSelectedChild(childrenData[0]);
       }
     };
-    fetchUserData();
+
+    fetchData();
   }, [userId]);
 
-  const getCurrentWeek = () => {
-    const now = new Date();
-    const start = new Date(now);
-    start.setDate(now.getDate() - now.getDay() + 1);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    
-    return `Semaine du ${start.getDate()} au ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`;
+  // Fetch planned days and today's meals when child changes
+  useEffect(() => {
+    if (!selectedChild) return;
+
+    const fetchMealData = async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+
+      // Fetch planned days for the week
+      const { data: mealPlans } = await supabase
+        .from('meal_plans')
+        .select('date')
+        .eq('profile_id', userId)
+        .eq('child_id', selectedChild.id);
+
+      if (mealPlans) {
+        setPlannedDays([...new Set(mealPlans.map(p => p.date))]);
+      }
+
+      // Fetch today's recipes
+      const { data: todayPlans } = await supabase
+        .from('meal_plans')
+        .select(`
+          meal_time,
+          recipe:recipe_id (
+            name,
+            preparation_time
+          )
+        `)
+        .eq('profile_id', userId)
+        .eq('child_id', selectedChild.id)
+        .eq('date', today);
+
+      if (todayPlans) {
+        const meals = {
+          snack: { name: null as string | null, prepTime: undefined as number | undefined },
+          dinner: { name: null as string | null, prepTime: undefined as number | undefined },
+          lunchbox: { name: null as string | null, prepTime: undefined as number | undefined },
+        };
+
+        todayPlans.forEach((plan: any) => {
+          if (plan.recipe) {
+            const mealType = plan.meal_time as 'snack' | 'dinner' | 'lunchbox';
+            if (mealType in meals) {
+              meals[mealType] = {
+                name: plan.recipe.name,
+                prepTime: plan.recipe.preparation_time,
+              };
+            }
+          }
+        });
+
+        setTodayMeals(meals);
+      }
+    };
+
+    fetchMealData();
+  }, [selectedChild, userId]);
+
+  const calculateAge = (birthDate: string): number => {
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
   };
+
+  const hasLunchboxObjective = selectedChild?.meal_objectives?.includes('lunchbox') ?? false;
 
   const handleActionSelect = (action: string) => {
     if (action === "quick-plan") {
@@ -61,75 +150,124 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     }
   };
 
+  const handleDayClick = (date: string) => {
+    navigate(`/dashboard/planner?date=${date}`);
+  };
+
+  // Show QuickStartGuide if no children
+  if (children.length === 0) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold">
+            Bonjour {username || "Parent"} 👋
+          </h1>
+          <p className="text-muted-foreground">
+            Commencez par créer le profil de votre enfant pour personnaliser Kidboost.
+          </p>
+        </div>
+        <QuickStartGuide onSelectStep={onSectionChange} />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header simplifié */}
-      <Card className="p-6 bg-gradient-to-r from-primary/10 via-accent/10 to-pastel-purple/10 relative overflow-hidden border-2 border-primary/20">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex-1">
-            <h2 className="text-3xl font-bold mb-2 flex items-center gap-2">
-              Bonjour {username} 👋
-            </h2>
-            {childrenNames.length > 0 ? (
-              <p className="text-muted-foreground text-lg">
-                Planifions ensemble les repas de {childrenNames.join(' et ')} cette semaine !
-              </p>
-            ) : (
-              <p className="text-muted-foreground text-lg">
-                Commencez par créer les profils de vos enfants 🎈
-              </p>
-            )}
-            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-white/80 rounded-full text-sm font-medium shadow-sm">
-              <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-              {getCurrentWeek()}
-            </div>
-          </div>
-          
-          {hasChildren && (
-            <Button 
-              onClick={generateQuickPlan}
-              disabled={loading}
-              size="lg"
-              className="whitespace-nowrap group hover:scale-105 transition-all duration-300 shadow-lg"
-            >
-              {loading ? (
-                <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Zap className="w-4 h-4 mr-2 group-hover:text-yellow-400" />
-              )}
-              Planning express de la semaine
-            </Button>
-          )}
+    <div className="space-y-4 animate-fade-in">
+      {/* Smart welcome + Child Profile Badge */}
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold">
+            Bonjour {username || "Parent"} 👋
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Voici ce que Kidboost a préparé pour {selectedChild?.name} aujourd'hui.
+          </p>
         </div>
-        
-        {/* Floating mascot */}
-        <div className="absolute -top-2 -right-2 w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center shadow-lg animate-float hidden md:flex">
-          <span className="text-3xl">✨</span>
-        </div>
-      </Card>
 
-      {/* Guide de démarrage pour nouveaux utilisateurs */}
-      {!hasChildren && <QuickStartGuide onSelectStep={onSectionChange} />}
+        {selectedChild && (
+          <ChildProfileBadge
+            childName={selectedChild.name}
+            childAge={calculateAge(selectedChild.birth_date)}
+            allergies={selectedChild.allergies || []}
+            onChangeChild={() => setShowChildSelector(true)}
+          />
+        )}
+      </div>
 
-      {/* Actions rapides */}
-      {hasChildren && (
-        <div className="space-y-3">
-          <h3 className="text-xl font-bold">Actions rapides</h3>
-          <ActionCards onSelectAction={handleActionSelect} />
-        </div>
+      {/* Today's Meals - TOP PRIORITY */}
+      {selectedChild && (
+        <TodayMeals
+          childName={selectedChild.name}
+          snack={todayMeals.snack}
+          dinner={todayMeals.dinner}
+          lunchbox={todayMeals.lunchbox}
+          showLunchbox={hasLunchboxObjective}
+          onViewRecipe={(type) => console.log("View", type)}
+          onReplaceRecipe={() => onSectionChange("recipes")}
+          onAddToList={() => onSectionChange("shopping")}
+        />
       )}
 
-      {/* Contenu principal */}
-      <div className="space-y-6">
-        <ProgressSteps onSectionChange={onSectionChange} />
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <PriorityTasks />
-          <WeeklyOverview />
-        </div>
+      {/* Compact Quick Actions */}
+      <CompactActionCards onSelectAction={handleActionSelect} loading={loading} />
 
-        <WeeklyBalance />
+      {/* Todo Now */}
+      <TodoNow
+        recipesReady={4}
+        totalRecipes={7}
+        daysPlanned={plannedDays.length}
+        totalDays={7}
+        shoppingListReady={false}
+        onAction={onSectionChange}
+      />
+
+      {/* Two columns: Calendar + Nutrition */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <MiniCalendar
+          plannedDays={plannedDays}
+          onDayClick={handleDayClick}
+          onViewFull={() => navigate("/dashboard/view-planner")}
+        />
+        <NutritionBalance
+          vegetables={25}
+          proteins={20}
+          starches={15}
+          dairy={10}
+        />
       </div>
+
+      {/* Week Progress */}
+      <WeekProgress
+        recipesReady={4}
+        totalRecipes={7}
+        daysPlanned={plannedDays.length}
+        totalDays={7}
+        shoppingListReady={false}
+      />
+
+      {/* Child Selector Dialog */}
+      <Dialog open={showChildSelector} onOpenChange={setShowChildSelector}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Changer d'enfant</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {children.map((child) => (
+              <Button
+                key={child.id}
+                variant={selectedChild?.id === child.id ? "default" : "outline"}
+                className="w-full justify-start"
+                onClick={() => {
+                  setSelectedChild(child);
+                  setShowChildSelector(false);
+                }}
+              >
+                {child.name} ({calculateAge(child.birth_date)} ans)
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
