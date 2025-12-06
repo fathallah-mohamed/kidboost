@@ -4,10 +4,11 @@ import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, Plus, Cookie, Utensils, Sandwich, Clock, ChefHat } from "lucide-react";
+import { ArrowLeft, Search, Plus, Cookie, Utensils, Sandwich, Clock, ChefHat, Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
 
-type FilterType = "all" | "snack" | "dinner" | "lunchbox";
+type FilterType = "all" | "snack" | "dinner" | "lunchbox" | "favorites";
 
 interface Recipe {
   id: string;
@@ -20,45 +21,89 @@ interface Recipe {
 export default function Recipes() {
   const navigate = useNavigate();
   const session = useSession();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchRecipes = async () => {
+    const fetchData = async () => {
       if (!session?.user?.id) return;
       
+      // Fetch recipes
       let query = supabase
         .from("recipes")
         .select("id, name, meal_type, preparation_time, difficulty")
         .eq("profile_id", session.user.id);
 
-      if (filter !== "all") {
+      if (filter !== "all" && filter !== "favorites") {
         query = query.eq("meal_type", filter);
       }
 
-      const { data, error } = await query.order("created_at", { ascending: false });
+      const { data: recipesData, error: recipesError } = await query.order("created_at", { ascending: false });
       
-      if (!error && data) {
-        setRecipes(data);
+      // Fetch favorites
+      const { data: favoritesData, error: favoritesError } = await supabase
+        .from("recipe_favorites")
+        .select("recipe_id")
+        .eq("profile_id", session.user.id);
+
+      if (!recipesError && recipesData) {
+        setRecipes(recipesData);
+      }
+      if (!favoritesError && favoritesData) {
+        setFavoriteIds(favoritesData.map(f => f.recipe_id).filter(Boolean) as string[]);
       }
       setLoading(false);
     };
 
-    fetchRecipes();
+    fetchData();
   }, [session?.user?.id, filter]);
+
+  const toggleFavorite = async (recipeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!session?.user?.id) return;
+
+    const isFavorite = favoriteIds.includes(recipeId);
+
+    if (isFavorite) {
+      const { error } = await supabase
+        .from("recipe_favorites")
+        .delete()
+        .eq("recipe_id", recipeId)
+        .eq("profile_id", session.user.id);
+
+      if (!error) {
+        setFavoriteIds(prev => prev.filter(id => id !== recipeId));
+        toast({ title: "Retiré des favoris" });
+      }
+    } else {
+      const { error } = await supabase
+        .from("recipe_favorites")
+        .insert({ recipe_id: recipeId, profile_id: session.user.id });
+
+      if (!error) {
+        setFavoriteIds(prev => [...prev, recipeId]);
+        toast({ title: "Ajouté aux favoris" });
+      }
+    }
+  };
 
   const filters = [
     { type: "all" as FilterType, label: "Tous", icon: ChefHat },
+    { type: "favorites" as FilterType, label: "Favoris", icon: Heart },
     { type: "snack" as FilterType, label: "Goûter", icon: Cookie },
     { type: "dinner" as FilterType, label: "Repas", icon: Utensils },
     { type: "lunchbox" as FilterType, label: "Lunchbox", icon: Sandwich },
   ];
 
-  const filteredRecipes = recipes.filter(recipe =>
-    recipe.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredRecipes = recipes.filter(recipe => {
+    const matchesSearch = recipe.name.toLowerCase().includes(search.toLowerCase());
+    const matchesFavorites = filter === "favorites" ? favoriteIds.includes(recipe.id) : true;
+    return matchesSearch && matchesFavorites;
+  });
 
   const getMealTypeIcon = (type: string) => {
     switch (type) {
@@ -78,7 +123,7 @@ export default function Recipes() {
           <div className="flex-1">
             <h1 className="text-xl font-bold">Toutes les recettes</h1>
           </div>
-          <Button onClick={() => navigate("/dashboard/generate")}>
+          <Button onClick={() => navigate("/generate-meal")}>
             <Plus className="w-4 h-4 mr-2" />
             Ajouter
           </Button>
@@ -105,7 +150,7 @@ export default function Recipes() {
                 onClick={() => setFilter(f.type)}
                 className="flex-shrink-0"
               >
-                <Icon className="w-4 h-4 mr-1" />
+                <Icon className={`w-4 h-4 mr-1 ${f.type === "favorites" && filter === "favorites" ? "fill-current" : ""}`} />
                 {f.label}
               </Button>
             );
@@ -120,9 +165,9 @@ export default function Recipes() {
           <Card className="p-8 text-center">
             <ChefHat className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">
-              {search ? "Aucune recette trouvée" : "Aucune recette enregistrée"}
+              {filter === "favorites" ? "Aucun favori" : search ? "Aucune recette trouvée" : "Aucune recette enregistrée"}
             </p>
-            <Button onClick={() => navigate("/dashboard/generate")}>
+            <Button onClick={() => navigate("/generate-meal")}>
               <Plus className="w-4 h-4 mr-2" />
               Créer une recette
             </Button>
@@ -131,6 +176,7 @@ export default function Recipes() {
           <div className="space-y-2">
             {filteredRecipes.map((recipe) => {
               const Icon = getMealTypeIcon(recipe.meal_type);
+              const isFavorite = favoriteIds.includes(recipe.id);
               return (
                 <Card
                   key={recipe.id}
@@ -151,6 +197,14 @@ export default function Recipes() {
                         <span className="capitalize">{recipe.difficulty}</span>
                       </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => toggleFavorite(recipe.id, e)}
+                      className="shrink-0"
+                    >
+                      <Heart className={`w-5 h-5 ${isFavorite ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+                    </Button>
                   </div>
                 </Card>
               );
