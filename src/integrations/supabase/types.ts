@@ -55,30 +55,42 @@ export type Database = {
       children_profiles: {
         Row: {
           allergies: string[] | null
+          available_time: number | null
           birth_date: string
           created_at: string
+          dislikes: string[] | null
           id: string
+          meal_objectives: string[] | null
           name: string
+          onboarding_completed: boolean | null
           preferences: string[] | null
           profile_id: string
           updated_at: string
         }
         Insert: {
           allergies?: string[] | null
+          available_time?: number | null
           birth_date: string
           created_at?: string
+          dislikes?: string[] | null
           id?: string
+          meal_objectives?: string[] | null
           name: string
+          onboarding_completed?: boolean | null
           preferences?: string[] | null
           profile_id: string
           updated_at?: string
         }
         Update: {
           allergies?: string[] | null
+          available_time?: number | null
           birth_date?: string
           created_at?: string
+          dislikes?: string[] | null
           id?: string
+          meal_objectives?: string[] | null
           name?: string
+          onboarding_completed?: boolean | null
           preferences?: string[] | null
           profile_id?: string
           updated_at?: string
@@ -260,16 +272,19 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          onboarding_completed: boolean | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           id: string
+          onboarding_completed?: boolean | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
+          onboarding_completed?: boolean | null
           updated_at?: string
         }
         Relationships: []
