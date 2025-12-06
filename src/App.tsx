@@ -7,6 +7,7 @@ import { SessionContextProvider } from '@supabase/auth-helpers-react';
 import { supabase } from '@/integrations/supabase/client';
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { useSession } from "@supabase/auth-helpers-react";
 import { useEffect } from "react";
@@ -44,6 +45,7 @@ const AppRoutes = () => {
       <Route path="/" element={<Index />} />
       <Route path="/login" element={session ? <Navigate to="/dashboard" /> : <Auth />} />
       <Route path="/signup" element={session ? <Navigate to="/dashboard" /> : <Auth />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/dashboard" element={session ? <Dashboard session={session} /> : <Navigate to="/login" />}>
         <Route index element={<Navigate to="/dashboard/overview" />} />
         <Route path="overview" element={<Dashboard session={session} />} />

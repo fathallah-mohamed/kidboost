@@ -5,12 +5,14 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/integrations/supabase/client';
 import { AuthError } from '@supabase/supabase-js';
+import { ForgotPasswordForm } from './ForgotPasswordForm';
 
 export const AuthForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { toast } = useToast();
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -93,6 +95,10 @@ export const AuthForm = () => {
     }
   };
 
+  if (showForgotPassword) {
+    return <ForgotPasswordForm onBack={() => setShowForgotPassword(false)} />;
+  }
+
   return (
     <Card className="p-6 w-full max-w-md mx-auto">
       <form onSubmit={handleAuth} className="space-y-4">
@@ -118,6 +124,17 @@ export const AuthForm = () => {
             className="w-full"
           />
         </div>
+        
+        {!isSignUp && (
+          <button
+            type="button"
+            onClick={() => setShowForgotPassword(true)}
+            className="text-sm text-muted-foreground hover:text-primary transition-colors w-full text-right"
+          >
+            Mot de passe oublié ?
+          </button>
+        )}
+        
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? 'Chargement...' : (isSignUp ? 'S\'inscrire' : 'Se connecter')}
         </Button>
