@@ -135,7 +135,7 @@ export default function Recipes() {
                 <Card
                   key={recipe.id}
                   className="p-3 cursor-pointer hover:shadow-md transition-all"
-                  onClick={() => navigate(`/dashboard/recipe/${recipe.id}`)}
+                  onClick={() => navigate(`/recipe/${recipe.id}`)}
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-primary/10 rounded-lg">
