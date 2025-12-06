@@ -31,20 +31,20 @@ export const MiniCalendar = ({ plannedDays, onDayClick, onViewFull }: MiniCalend
   });
 
   return (
-    <Card className="p-4 space-y-3">
+    <Card className="p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-primary" />
-          <h3 className="font-bold text-sm">Aperçu de la semaine</h3>
+          <h3 className="font-bold text-sm">Semaine</h3>
         </div>
         <Button
           variant="ghost"
           size="sm"
           onClick={onViewFull}
-          className="text-xs h-7 px-2"
+          className="text-xs h-6 px-2"
         >
-          Voir tout
-          <ChevronRight className="w-3 h-3 ml-1" />
+          Voir
+          <ChevronRight className="w-3 h-3 ml-0.5" />
         </Button>
       </div>
 
@@ -53,16 +53,17 @@ export const MiniCalendar = ({ plannedDays, onDayClick, onViewFull }: MiniCalend
           <button
             key={day.formattedDate}
             onClick={() => onDayClick(day.formattedDate)}
-            className={`flex flex-col items-center p-2 rounded-lg transition-all hover:scale-105 ${
-              day.isToday
-                ? "bg-primary text-primary-foreground"
+            className={`flex flex-col items-center p-1.5 rounded-lg transition-all cursor-pointer
+              hover:scale-105 hover:shadow-sm active:scale-95
+              ${day.isToday
+                ? "bg-primary text-primary-foreground shadow-sm"
                 : "bg-muted/50 hover:bg-muted"
-            }`}
+              }`}
           >
-            <span className="text-[10px] font-medium uppercase">{day.dayName}</span>
-            <span className="text-sm font-bold">{day.dayNumber}</span>
+            <span className="text-[9px] font-medium uppercase">{day.dayName}</span>
+            <span className="text-xs font-bold">{day.dayNumber}</span>
             <div
-              className={`w-2 h-2 rounded-full mt-1 ${
+              className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
                 day.isPlanned ? "bg-pastel-green" : "bg-destructive/60"
               }`}
             />
@@ -70,14 +71,14 @@ export const MiniCalendar = ({ plannedDays, onDayClick, onViewFull }: MiniCalend
         ))}
       </div>
 
-      <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-pastel-green" />
+          <div className="w-1.5 h-1.5 rounded-full bg-pastel-green" />
           <span>Planifié</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-destructive/60" />
-          <span>Non planifié</span>
+          <div className="w-1.5 h-1.5 rounded-full bg-destructive/60" />
+          <span>À planifier</span>
         </div>
       </div>
     </Card>

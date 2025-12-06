@@ -14,7 +14,7 @@ interface MealCardProps {
 const mealConfig = {
   snack: {
     icon: Cookie,
-    label: "Goûter du jour",
+    label: "Goûter",
     gradient: "from-pastel-yellow/30 to-pastel-yellow/10",
     iconBg: "bg-pastel-yellow/50",
   },
@@ -37,52 +37,45 @@ const MealCard = ({ type, recipeName, prepTime, onView, onReplace, onAddToList }
   const Icon = config.icon;
 
   return (
-    <Card className={`p-4 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all`}>
-      <div className="flex items-start gap-3">
-        <div className={`p-2.5 ${config.iconBg} rounded-xl`}>
-          <Icon className="w-5 h-5 text-foreground" />
+    <Card className={`p-3 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all`}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`p-1.5 ${config.iconBg} rounded-lg`}>
+          <Icon className="w-4 h-4 text-foreground" />
         </div>
-        
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground mb-1">{config.label}</p>
-          
-          {recipeName ? (
-            <>
-              <h4 className="font-bold text-sm truncate mb-1">{recipeName}</h4>
-              {prepTime && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  <span>{prepTime} min</span>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">Pas encore de recette</p>
-          )}
-        </div>
+        <span className="text-xs font-semibold text-muted-foreground">{config.label}</span>
       </div>
-
-      <div className="flex gap-2 mt-3">
-        {recipeName ? (
-          <>
-            <Button size="sm" variant="ghost" className="flex-1 h-8 text-xs" onClick={onView}>
-              <Eye className="w-3 h-3 mr-1" />
-              Voir
+      
+      {recipeName ? (
+        <div className="space-y-2">
+          <div>
+            <h4 className="font-bold text-sm truncate">{recipeName}</h4>
+            {prepTime && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                <span>{prepTime} min</span>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-1 justify-end">
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onView}>
+              <Eye className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="ghost" className="flex-1 h-8 text-xs" onClick={onReplace}>
-              <RefreshCw className="w-3 h-3 mr-1" />
-              Remplacer
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onReplace}>
+              <RefreshCw className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="secondary" className="h-8 text-xs px-2" onClick={onAddToList}>
+            <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={onAddToList}>
               <Plus className="w-3 h-3" />
             </Button>
-          </>
-        ) : (
-          <Button size="sm" className="w-full h-8 text-xs" onClick={onReplace}>
-            Générer une recette
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground italic">Pas de recette</p>
+          <Button size="sm" className="h-7 px-3 text-xs" onClick={onReplace}>
+            Générer
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </Card>
   );
 };
@@ -109,12 +102,12 @@ export const TodayMeals = ({
   onAddToList,
 }: TodayMealsProps) => {
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold flex items-center gap-2">
+    <div className="space-y-2">
+      <h2 className="text-lg font-bold">
         Aujourd'hui pour {childName} 👋
       </h2>
       
-      <div className={`grid gap-3 ${showLunchbox ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+      <div className={`grid gap-2 ${showLunchbox ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
         <MealCard
           type="snack"
           recipeName={snack.name}
