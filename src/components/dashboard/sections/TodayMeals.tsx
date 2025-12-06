@@ -37,45 +37,47 @@ const MealCard = ({ type, recipeName, prepTime, onView, onReplace, onAddToList }
   const Icon = config.icon;
 
   return (
-    <Card className={`p-3 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all`}>
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`p-1.5 ${config.iconBg} rounded-lg`}>
-          <Icon className="w-4 h-4 text-foreground" />
+    <Card className={`px-2.5 py-2 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all`}>
+      <div className="flex items-center gap-2">
+        <div className={`p-1 ${config.iconBg} rounded-md`}>
+          <Icon className="w-3.5 h-3.5 text-foreground" />
         </div>
-        <span className="text-xs font-semibold text-muted-foreground">{config.label}</span>
-      </div>
-      
-      {recipeName ? (
-        <div className="space-y-2">
-          <div>
-            <h4 className="font-bold text-sm truncate">{recipeName}</h4>
-            {prepTime && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="w-3 h-3" />
-                <span>{prepTime} min</span>
-              </div>
-            )}
-          </div>
-          <div className="flex gap-1 justify-end">
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onView}>
+        
+        <div className="flex-1 min-w-0">
+          <span className="text-[10px] font-semibold text-muted-foreground block leading-tight">{config.label}</span>
+          {recipeName ? (
+            <div className="flex items-center gap-1">
+              <h4 className="font-bold text-xs truncate">{recipeName}</h4>
+              {prepTime && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                  <Clock className="w-2.5 h-2.5" />
+                  {prepTime}m
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Pas de recette</p>
+          )}
+        </div>
+
+        {recipeName ? (
+          <div className="flex gap-0.5">
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onView}>
               <Eye className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onReplace}>
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onReplace}>
               <RefreshCw className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={onAddToList}>
+            <Button size="sm" variant="secondary" className="h-6 w-6 p-0" onClick={onAddToList}>
               <Plus className="w-3 h-3" />
             </Button>
           </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground italic">Pas de recette</p>
-          <Button size="sm" className="h-7 px-3 text-xs" onClick={onReplace}>
+        ) : (
+          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onReplace}>
             Générer
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </Card>
   );
 };
@@ -102,12 +104,12 @@ export const TodayMeals = ({
   onAddToList,
 }: TodayMealsProps) => {
   return (
-    <div className="space-y-2">
-      <h2 className="text-lg font-bold">
+    <div className="space-y-1.5">
+      <h2 className="text-base font-bold">
         Aujourd'hui pour {childName} 👋
       </h2>
       
-      <div className={`grid gap-2 ${showLunchbox ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+      <div className="space-y-1.5">
         <MealCard
           type="snack"
           recipeName={snack.name}

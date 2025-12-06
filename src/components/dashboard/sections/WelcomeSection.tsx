@@ -278,14 +278,14 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   }
 
   return (
-    <div className="space-y-3 animate-fade-in pb-4">
+    <div className="space-y-2 animate-fade-in pb-2">
       {/* Smart welcome + Child Profile Badge */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <div>
-          <h1 className="text-lg md:text-xl font-bold">
+          <h1 className="text-base md:text-lg font-bold leading-tight">
             Bonjour {username || "Parent"} 👋
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Voici ce que Kidboost a préparé pour {selectedChild?.name} aujourd'hui.
           </p>
         </div>
