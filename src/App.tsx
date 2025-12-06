@@ -12,6 +12,7 @@ import Onboarding from "./pages/Onboarding";
 import GenerateMeal from "./pages/GenerateMeal";
 import PlanningExpress from "./pages/PlanningExpress";
 import Recipes from "./pages/Recipes";
+import RecipeDetail from "./pages/RecipeDetail";
 import Planning from "./pages/Planning";
 import ShoppingListPage from "./pages/ShoppingList";
 import DayPlanning from "./pages/DayPlanning";
@@ -112,6 +113,7 @@ const AppRoutes = () => {
       <Route path="/generate-meal" element={session ? <GenerateMeal /> : <Navigate to="/login" />} />
       <Route path="/planning-express" element={session ? <PlanningExpress /> : <Navigate to="/login" />} />
       <Route path="/recipes" element={session ? <Recipes /> : <Navigate to="/login" />} />
+      <Route path="/recipe/:id" element={session ? <RecipeDetail /> : <Navigate to="/login" />} />
       <Route path="/planning" element={session ? <Planning /> : <Navigate to="/login" />} />
       <Route path="/planning/day/:date" element={session ? <DayPlanning /> : <Navigate to="/login" />} />
       <Route path="/shopping-list" element={session ? <ShoppingListPage /> : <Navigate to="/login" />} />
