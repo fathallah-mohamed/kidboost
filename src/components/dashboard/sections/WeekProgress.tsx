@@ -45,49 +45,40 @@ export const WeekProgress = ({
     },
   ];
 
-  // Dynamic messages
   const messages: string[] = [];
-  if (remaining > 0) {
-    messages.push(`Il reste ${remaining} repas à préparer`);
-  }
-  if (daysPlanned < totalDays) {
-    messages.push("Planifiez la semaine en 1 clic");
-  }
-  if (!shoppingListReady) {
-    messages.push("Liste de courses non générée");
-  }
-  if (messages.length === 0) {
-    messages.push("Tout est prêt pour la semaine ! 🎉");
-  }
+  if (remaining > 0) messages.push(`${remaining} repas à préparer`);
+  if (daysPlanned < totalDays) messages.push("Planifiez en 1 clic");
+  if (!shoppingListReady) messages.push("Liste non générée");
+  if (messages.length === 0) messages.push("Tout est prêt ! 🎉");
 
   return (
-    <Card className="p-3 space-y-3">
-      <h3 className="font-bold text-sm">Votre organisation</h3>
+    <Card className="p-2 space-y-1.5">
+      <h3 className="font-bold text-xs">Votre organisation</h3>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1.5">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
-            <div key={index} className="text-center space-y-1">
+            <div key={index} className="text-center space-y-0.5">
               <div className="flex justify-center">
-                <div className={`p-1.5 ${stat.color}/20 rounded-lg`}>
-                  <Icon className="w-4 h-4 text-foreground" />
+                <div className={`p-1 ${stat.color}/20 rounded-md`}>
+                  <Icon className="w-3.5 h-3.5 text-foreground" />
                 </div>
               </div>
-              <p className="text-base font-bold">{stat.value}</p>
-              <p className="text-[10px] text-muted-foreground">{stat.label}</p>
-              <Progress value={stat.percent} className="h-1" />
+              <p className="text-sm font-bold leading-none">{stat.value}</p>
+              <p className="text-[9px] text-muted-foreground">{stat.label}</p>
+              <Progress value={stat.percent} className="h-0.5" />
             </div>
           );
         })}
       </div>
 
-      <div className="space-y-1 pt-1 border-t border-border/50">
+      <div className="flex flex-wrap gap-x-2 gap-y-0.5 pt-0.5 border-t border-border/30">
         {messages.map((msg, index) => (
-          <p key={index} className="text-sm text-muted-foreground flex items-center gap-1.5">
+          <span key={index} className="text-[10px] text-muted-foreground flex items-center gap-1">
             <span className="w-1 h-1 rounded-full bg-primary" />
             {msg}
-          </p>
+          </span>
         ))}
       </div>
     </Card>

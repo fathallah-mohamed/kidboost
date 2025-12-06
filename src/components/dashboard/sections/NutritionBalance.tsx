@@ -33,33 +33,33 @@ export const NutritionBalance = ({
     ));
 
     if (overallBalance >= 80) {
-      return { text: "Bien équilibré 🎉", color: "text-pastel-green-foreground" };
+      return { text: "Équilibré 🎉", color: "text-pastel-green-foreground" };
     }
     if (vegetablesPercent < 20) {
-      return { text: "Légumes à renforcer 🥬", color: "text-destructive" };
+      return { text: "Légumes ↑", color: "text-destructive" };
     }
     if (overallBalance >= 50) {
-      return { text: `Équilibré à ${overallBalance}%`, color: "text-pastel-yellow-foreground" };
+      return { text: `${overallBalance}%`, color: "text-pastel-yellow-foreground" };
     }
-    return { text: "À améliorer 💡", color: "text-muted-foreground" };
+    return { text: "À améliorer", color: "text-muted-foreground" };
   };
 
   const message = getBalanceMessage();
 
   return (
-    <Card className="p-3 space-y-2">
-      <h3 className="font-bold text-sm">Équilibre nutritionnel</h3>
+    <Card className="p-2 space-y-1">
+      <h3 className="font-bold text-xs">Nutrition</h3>
 
-      <div className="flex items-center gap-3">
-        <div className="w-16 h-16 flex-shrink-0">
+      <div className="flex items-center gap-2">
+        <div className="w-12 h-12 flex-shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius={18}
-                outerRadius={30}
+                innerRadius={14}
+                outerRadius={22}
                 paddingAngle={2}
                 dataKey="value"
               >
@@ -71,18 +71,18 @@ export const NutritionBalance = ({
           </ResponsiveContainer>
         </div>
 
-        <div className="flex-1 space-y-1">
-          <p className={`text-sm font-medium ${message.color}`}>
+        <div className="flex-1 space-y-0.5">
+          <p className={`text-xs font-semibold ${message.color}`}>
             {message.text}
           </p>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+          <div className="grid grid-cols-2 gap-x-1 gap-y-0">
             {data.map((item) => (
-              <div key={item.name} className="flex items-center gap-1">
+              <div key={item.name} className="flex items-center gap-0.5">
                 <div
-                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-[10px] text-muted-foreground truncate">{item.name}</span>
+                <span className="text-[8px] text-muted-foreground truncate">{item.name}</span>
               </div>
             ))}
           </div>
