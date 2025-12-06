@@ -8,9 +8,10 @@ import { supabase } from '@/integrations/supabase/client';
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
+import Onboarding from "./pages/Onboarding";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { useSession } from "@supabase/auth-helpers-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { RecipeGenerator } from "./components/dashboard/RecipeGenerator";
 import { MealPlanner } from "./components/dashboard/MealPlanner";
@@ -21,6 +22,56 @@ import { RecipeGeneratorPage } from "./components/dashboard/recipe/RecipeGenerat
 import { PlannerPage } from "./components/dashboard/planner/PlannerPage";
 
 const queryClient = new QueryClient();
+
+// Component to check onboarding status and redirect
+const OnboardingGuard = ({ children }: { children: React.ReactNode }) => {
+  const session = useSession();
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      if (!session?.user?.id) {
+        setCheckingOnboarding(false);
+        return;
+      }
+
+      try {
+        // Check if user has any children profiles
+        const { data: children, error } = await supabase
+          .from('children_profiles')
+          .select('id')
+          .eq('profile_id', session.user.id)
+          .limit(1);
+
+        if (error) throw error;
+
+        // If no children profiles, needs onboarding
+        setNeedsOnboarding(!children || children.length === 0);
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+      } finally {
+        setCheckingOnboarding(false);
+      }
+    };
+
+    checkOnboarding();
+  }, [session?.user?.id]);
+
+  if (checkingOnboarding) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse text-muted-foreground">Chargement...</div>
+      </div>
+    );
+  }
+
+  if (needsOnboarding) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  return <>{children}</>;
+};
 
 const AppRoutes = () => {
   const session = useSession();
@@ -46,9 +97,21 @@ const AppRoutes = () => {
       <Route path="/login" element={session ? <Navigate to="/dashboard" /> : <Auth />} />
       <Route path="/signup" element={session ? <Navigate to="/dashboard" /> : <Auth />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/dashboard" element={session ? <Dashboard session={session} /> : <Navigate to="/login" />}>
+      <Route path="/onboarding" element={session ? <Onboarding /> : <Navigate to="/login" />} />
+      <Route 
+        path="/dashboard" 
+        element={
+          session ? (
+            <OnboardingGuard>
+              <Dashboard session={session} />
+            </OnboardingGuard>
+          ) : (
+            <Navigate to="/login" />
+          )
+        }
+      >
         <Route index element={<Navigate to="/dashboard/overview" />} />
-        <Route path="overview" element={<Dashboard session={session} />} />
+        <Route path="overview" element={<Dashboard session={session!} />} />
         <Route path="recipes" element={<RecipeGenerator onSectionChange={() => {}} />} />
         <Route path="generate" element={<RecipeGeneratorPage />} />
         <Route path="generate-recipes" element={<RecipeGeneratorPage />} />
