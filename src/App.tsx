@@ -9,6 +9,13 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
+import GenerateMeal from "./pages/GenerateMeal";
+import PlanningExpress from "./pages/PlanningExpress";
+import Recipes from "./pages/Recipes";
+import Planning from "./pages/Planning";
+import ShoppingListPage from "./pages/ShoppingList";
+import DayPlanning from "./pages/DayPlanning";
+import Children from "./pages/Children";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { useSession } from "@supabase/auth-helpers-react";
 import { useEffect, useState } from "react";
@@ -100,6 +107,16 @@ const AppRoutes = () => {
       <Route path="/signup" element={session ? <Navigate to="/dashboard" /> : <Auth />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/onboarding" element={session ? <Onboarding /> : <Navigate to="/login" />} />
+      
+      {/* New standalone pages */}
+      <Route path="/generate-meal" element={session ? <GenerateMeal /> : <Navigate to="/login" />} />
+      <Route path="/planning-express" element={session ? <PlanningExpress /> : <Navigate to="/login" />} />
+      <Route path="/recipes" element={session ? <Recipes /> : <Navigate to="/login" />} />
+      <Route path="/planning" element={session ? <Planning /> : <Navigate to="/login" />} />
+      <Route path="/planning/day/:date" element={session ? <DayPlanning /> : <Navigate to="/login" />} />
+      <Route path="/shopping-list" element={session ? <ShoppingListPage /> : <Navigate to="/login" />} />
+      <Route path="/children" element={session ? <Children /> : <Navigate to="/login" />} />
+      
       <Route 
         path="/dashboard" 
         element={

@@ -140,15 +140,20 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
 
   const handleActionSelect = async (action: string) => {
     if (action === "quick-plan") {
-      await generateQuickPlan();
-      refreshDashboard();
+      navigate(`/planning-express${selectedChild ? `?childId=${selectedChild.id}` : ""}`);
+    } else if (action === "recipes") {
+      navigate("/recipes");
+    } else if (action === "planner") {
+      navigate(`/planning${selectedChild ? `?childId=${selectedChild.id}` : ""}`);
+    } else if (action === "shopping") {
+      navigate("/shopping-list");
     } else {
       onSectionChange(action);
     }
   };
 
   const handleDayClick = (date: string) => {
-    navigate(`/dashboard/planner?date=${date}`);
+    navigate(`/planning/day/${date}${selectedChild ? `?childId=${selectedChild.id}` : ""}`);
   };
 
   const handleViewRecipe = (type: string) => {
