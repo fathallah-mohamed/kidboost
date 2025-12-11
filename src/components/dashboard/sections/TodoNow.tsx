@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Calendar, ShoppingCart, ChefHat, CheckCircle, ArrowRight, Target } from "lucide-react";
+import { AlertCircle, Calendar, ShoppingCart, UtensilsCrossed, CheckCircle, ArrowRight, Target } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 
@@ -36,10 +36,17 @@ export const TodoNow = ({
   const tasks: Task[] = [];
 
   // Primary task: meals to plan
-  if (mealsToplan > 0) {
+  const missingRecipes = totalRecipes - recipesReady;
+  
+  if (mealsToplan > 0 || missingRecipes > 0) {
+    // Combine into a single meaningful message
+    const parts: string[] = [];
+    if (mealsToplan > 0) parts.push(`${mealsToplan} repas à planifier`);
+    if (missingRecipes > 0) parts.push(`${missingRecipes} recette${missingRecipes > 1 ? 's' : ''} à ajouter`);
+    
     tasks.push({
       id: "meals-to-plan",
-      message: `🎯 Il manque ${mealsToplan} repas à planifier cette semaine`,
+      message: `🎯 ${parts.join(' • ')}`,
       action: "Planifier",
       route: "/planning",
       icon: Target,
@@ -56,25 +63,14 @@ export const TodoNow = ({
     });
   }
 
-  if (recipesReady < totalRecipes) {
-    tasks.push({
-      id: "incomplete-recipes",
-      message: `${totalRecipes - recipesReady} recette(s) manquante(s)`,
-      action: "Ajouter",
-      route: "/recipes",
-      icon: ChefHat,
-      priority: "medium",
-    });
-  }
-
   if (!shoppingListReady && daysPlanned > 0) {
     tasks.push({
       id: "shopping-list",
-      message: "Liste de courses à créer",
+      message: "🛒 Liste de courses à créer",
       action: "Créer",
       route: "/shopping-list",
       icon: ShoppingCart,
-      priority: "low",
+      priority: "medium",
     });
   }
 
