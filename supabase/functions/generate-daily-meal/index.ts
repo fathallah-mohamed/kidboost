@@ -486,6 +486,25 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
       tips: 'Conserver au réfrigérateur'
     };
 
+    // Build health benefits array (not stringified - Supabase handles JSON columns directly)
+    const healthBenefitsArray = [
+      ...(recipeData.reuse_info ? [{
+        icon: '🔄',
+        category: 'reuse',
+        description: `Peut servir ${recipeData.reuse_info.total_uses || defaultReuseInfo.total_uses} fois`
+      }] : []),
+      ...(recipeData.storage_info ? [{
+        icon: '❄️',
+        category: 'storage',
+        description: `Conservation: ${recipeData.storage_info.duration_days || defaultStorageInfo.duration_days} jours`
+      }] : []),
+      ...(recipeData.is_batch_cooking ? [{
+        icon: '👨‍🍳',
+        category: 'batch',
+        description: 'Parfait pour le batch cooking'
+      }] : [])
+    ];
+
     // Save recipe to database with reuse info
     const { data: savedRecipe, error: saveError } = await supabase
       .from('recipes')
@@ -501,28 +520,12 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
         is_generated: true,
         auto_generated: true,
         difficulty: 'easy',
-        servings: repeatCount, // Utilisé pour le nombre de portions/réutilisations
+        servings: repeatCount,
         max_prep_time: availableTime,
         source: 'ia',
         allergens: allergies ? allergies.split(", ") : [],
         dietary_preferences: restrictions ? restrictions.split(", ") : [],
-        health_benefits: JSON.stringify([
-          ...(recipeData.reuse_info ? [{
-            icon: '🔄',
-            category: 'reuse',
-            description: `Peut servir ${recipeData.reuse_info.total_uses || defaultReuseInfo.total_uses} fois`
-          }] : []),
-          ...(recipeData.storage_info ? [{
-            icon: '❄️',
-            category: 'storage',
-            description: `Conservation: ${recipeData.storage_info.duration_days || defaultStorageInfo.duration_days} jours`
-          }] : []),
-          ...(recipeData.is_batch_cooking ? [{
-            icon: '👨‍🍳',
-            category: 'batch',
-            description: 'Parfait pour le batch cooking'
-          }] : [])
-        ])
+        health_benefits: healthBenefitsArray
       })
       .select()
       .single();
