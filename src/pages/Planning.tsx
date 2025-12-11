@@ -290,23 +290,34 @@ export default function Planning() {
     }
   };
 
-  const handleGenerateRecipe = () => {
-    if (selectedChild && selectedSlot && selectedDate) {
-      // Determine the correct meal type for generation
-      const lunchConfig = lunchConfigs.find(c => c.date === selectedDate);
-      let mealType = selectedSlot;
-      
-      if (selectedSlot === 'lunch' && lunchConfig) {
-        if (lunchConfig.lunchType === 'school_trip') {
-          mealType = 'lunchbox_trip' as MealSlot;
-        } else if (lunchConfig.lunchType === 'special_diet') {
-          mealType = 'lunchbox_special' as MealSlot;
-        }
-      }
-      
-      navigate(`/generate-meal?childId=${selectedChild.id}&mealType=${mealType}&date=${selectedDate}&from=planning`);
+  // Refresh planned meals after generation
+  const handleRecipeGenerated = async () => {
+    if (!session?.user?.id || !selectedChild) return;
+    
+    const startDate = format(currentWeekStart, "yyyy-MM-dd");
+    const endDate = format(weekEnd, "yyyy-MM-dd");
+
+    const { data } = await supabase
+      .from("meal_plans")
+      .select(`
+        id,
+        date,
+        meal_time,
+        recipe:recipes(id, name, preparation_time)
+      `)
+      .eq("profile_id", session.user.id)
+      .eq("child_id", selectedChild.id)
+      .gte("date", startDate)
+      .lte("date", endDate);
+
+    if (data) {
+      setPlannedMeals(data as PlannedMeal[]);
     }
   };
+
+  // Check if current slot is a canteen override
+  const isCanteenOverride = selectedSlot === 'lunch' && selectedDate && 
+    lunchConfigs.find(c => c.date === selectedDate)?.lunchType === 'canteen';
 
   const childIdFromParams = searchParams.get("childId");
 
@@ -423,8 +434,10 @@ export default function Planning() {
             slot={selectedSlot}
             userId={session.user.id}
             childId={selectedChild?.id || null}
+            childName={selectedChild?.name}
+            isCanteenOverride={isCanteenOverride}
             onSelectRecipe={handleSelectRecipe}
-            onNavigateToGenerate={handleGenerateRecipe}
+            onRecipeGenerated={handleRecipeGenerated}
           />
         )}
       </div>
