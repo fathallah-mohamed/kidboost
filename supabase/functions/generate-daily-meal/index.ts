@@ -13,9 +13,18 @@ serve(async (req) => {
   }
 
   try {
-    const { childId, profileId, mealType, date, context, busyParentMode = true } = await req.json();
+    const { 
+      childId, 
+      profileId, 
+      mealType, 
+      date, 
+      context, 
+      busyParentMode = true,
+      // Nouvelles préférences de planification
+      planningPreferences
+    } = await req.json();
     
-    console.log("generate-daily-meal - Request:", { childId, profileId, mealType, date, context, busyParentMode });
+    console.log("generate-daily-meal - Request:", { childId, profileId, mealType, date, context, busyParentMode, planningPreferences });
 
     if (!childId || !profileId || !mealType || !date) {
       throw new Error("childId, profileId, mealType et date sont requis");
@@ -36,20 +45,54 @@ serve(async (req) => {
       throw new Error("Enfant non trouvé");
     }
 
+    // Get parent preferences for planning
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('preferences_parent')
+      .eq('id', profileId)
+      .single();
+
+    const parentPrefs = profileData?.preferences_parent as any || {};
+    const cookingFrequency = planningPreferences?.cooking_frequency || parentPrefs.cooking_frequency || 'every_2_days';
+    const reuseLevel = planningPreferences?.reuse_level ?? parentPrefs.reuse_level ?? 'auto';
+    const includeWeekend = planningPreferences?.include_weekend ?? parentPrefs.include_weekend ?? true;
+
+    console.log("Planning preferences:", { cookingFrequency, reuseLevel, includeWeekend });
+
+    // Calculer le nombre max de réutilisations selon le type de repas
+    const getDefaultMaxUses = (type: string): number => {
+      switch (type) {
+        case 'snack': return 4; // Gâteaux, muffins peuvent durer plus
+        case 'breakfast': return 3; // Pancakes, muffins petit-déj
+        case 'lunch': 
+        case 'dinner': return 2; // Plats chauds
+        default: return 2;
+      }
+    };
+
+    // Calculer le repeat_count réel
+    const calculateRepeatCount = (portionEstimate: number): number => {
+      if (reuseLevel === 'auto') {
+        return portionEstimate;
+      }
+      return Math.min(Number(reuseLevel), portionEstimate);
+    };
+
     // BUSY PARENT MODE: Check for reusable recipes first
-    if (busyParentMode) {
+    if (busyParentMode && reuseLevel !== 0) {
       console.log("Busy parent mode enabled - checking for reusable recipes");
       
-      // Get recipes from last 3 days that can be reused
-      const threeDaysAgo = new Date();
-      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      // Get recipes from last 5 days that can be reused
+      const daysToCheck = reuseLevel === 'auto' ? 5 : Math.min(Number(reuseLevel) + 2, 5);
+      const checkDate = new Date();
+      checkDate.setDate(checkDate.getDate() - daysToCheck);
       
       const { data: reusableRecipes } = await supabase
         .from('recipes')
         .select('*')
         .eq('child_id', childId)
         .eq('meal_type', mealType)
-        .gte('created_at', threeDaysAgo.toISOString())
+        .gte('created_at', checkDate.toISOString())
         .order('created_at', { ascending: false });
 
       // Check meal plans to count how many times each recipe has been used
@@ -58,22 +101,23 @@ serve(async (req) => {
         .select('recipe_id, date')
         .eq('child_id', childId)
         .eq('meal_time', mealType)
-        .gte('date', threeDaysAgo.toISOString().split('T')[0]);
+        .gte('date', checkDate.toISOString().split('T')[0]);
 
       const recipeUsageCount: Record<string, number> = {};
       recentMealPlans?.forEach(plan => {
         recipeUsageCount[plan.recipe_id] = (recipeUsageCount[plan.recipe_id] || 0) + 1;
       });
 
-      // Find a recipe that can still be reused (default max uses: snack=3, meals=2)
-      const maxUses = mealType === 'snack' ? 3 : 2;
+      // Calculer max uses selon les préférences
+      const defaultMaxUses = getDefaultMaxUses(mealType);
       
       for (const recipe of reusableRecipes || []) {
         const currentUses = recipeUsageCount[recipe.id] || 1;
-        const recipeMaxUses = recipe.reuse_info?.total_uses || maxUses;
+        const recipePortionEstimate = recipe.servings || defaultMaxUses;
+        const maxUses = calculateRepeatCount(recipePortionEstimate);
         
-        if (currentUses < recipeMaxUses) {
-          console.log(`Reusing recipe "${recipe.name}" (${currentUses}/${recipeMaxUses} uses)`);
+        if (currentUses < maxUses) {
+          console.log(`Reusing recipe "${recipe.name}" (${currentUses}/${maxUses} uses)`);
           
           // Create meal plan entry for reuse
           const { data: existingPlan } = await supabase
@@ -106,8 +150,14 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({ 
               success: true, 
-              recipe: { ...recipe, is_reuse: true, remaining_uses: recipeMaxUses - currentUses - 1 },
-              message: `Réutilisation de "${recipe.name}" (${currentUses + 1}/${recipeMaxUses})`,
+              recipe: { 
+                ...recipe, 
+                is_reuse: true, 
+                remaining_uses: maxUses - currentUses - 1,
+                portion_usage_estimate: recipePortionEstimate,
+                repeat_count: maxUses
+              },
+              message: `Réutilisation de "${recipe.name}" (${currentUses + 1}/${maxUses})`,
               isReuse: true
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -234,15 +284,22 @@ CONTRAINTES STRICTES - LUNCHBOX RÉGIME SPÉCIAL:
       ? `\n\n⚠️ RECETTES À NE PAS REPRODUIRE (déjà préparées récemment):\n${recipesToExclude.map(r => `- ${r}`).join('\n')}\nTu DOIS proposer une recette DIFFÉRENTE de celles listées ci-dessus.`
       : '';
 
-    // Busy parent mode instructions
+    // Busy parent mode instructions - enrichi avec les préférences
     const busyParentInstructions = busyParentMode ? `
 🏃 MODE PARENT PRESSÉ ACTIVÉ:
-- Cette recette DOIT pouvoir être réutilisée ${mealType === 'snack' ? '3 fois' : '2 fois'} dans la semaine
+- Fréquence de cuisine du parent: ${cookingFrequency === 'once_a_week' ? 'Batch cooking (1x/semaine)' : cookingFrequency === 'twice_a_week' ? '2 fois par semaine' : cookingFrequency === 'every_2_days' ? 'Tous les 2 jours' : 'Quotidien'}
+- Niveau de réutilisation: ${reuseLevel === 'auto' ? 'Automatique selon le plat' : `${Number(reuseLevel) + 1} repas par préparation`}
+${!includeWeekend ? '- ATTENTION: Ne pas planifier le week-end (Lundi-Vendredi uniquement)' : ''}
+
+RÈGLES DE RÉUTILISATION:
+- Cette recette DOIT pouvoir servir ${mealType === 'snack' ? '3-4 fois' : '2-3 fois'} dans la semaine
 - Privilégie le BATCH COOKING: préparer une fois, manger plusieurs fois
-- Indique clairement comment conserver et réchauffer
-- Temps de préparation minimal, résultat maximal
+- Indique clairement combien de fois le plat peut être réutilisé (portion_usage_estimate)
+- Indique comment conserver et réchauffer
 - Les goûters doivent pouvoir durer 2-3 jours (cake, muffins, biscuits maison)
-- Les plats doivent bien se réchauffer ou se manger froids` : '';
+- Les plats doivent bien se réchauffer ou se manger froids
+
+IMPORTANT: Retourne toujours "portion_usage_estimate" avec le nombre de fois que cette recette peut servir.` : '';
 
     const prompt = `Crée une recette ORIGINALE et UNIQUE de ${mealConfig.label} pour ${child.name}, ${childAge} ans.
 
@@ -377,9 +434,10 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
                     tips: { type: "string", description: "Conseils de conservation" }
                   }
                 },
-                is_batch_cooking: { type: "boolean", description: "Si cette recette est adaptée au batch cooking" }
+                is_batch_cooking: { type: "boolean", description: "Si cette recette est adaptée au batch cooking" },
+                portion_usage_estimate: { type: "number", description: "Combien de fois ce plat peut être servi (1-4). Ex: cake=3, gratin=2, salade=1" }
               },
-              required: ["name", "ingredients", "instructions", "preparation_time", "nutritional_info"]
+              required: ["name", "ingredients", "instructions", "preparation_time", "nutritional_info", "portion_usage_estimate"]
             }
           }
         }],
@@ -410,16 +468,20 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
       throw new Error("Réponse IA invalide, veuillez réessayer");
     }
 
-    // Default reuse info based on meal type if not provided
+    // Calculer portion_usage_estimate et repeat_count
+    const portionUsageEstimate = recipeData.portion_usage_estimate || getDefaultMaxUses(mealType);
+    const repeatCount = calculateRepeatCount(portionUsageEstimate);
+
+    // Default reuse info based on meal type and preferences
     const defaultReuseInfo = {
-      total_uses: mealType === 'snack' ? 3 : 2,
-      best_days: mealType === 'snack' ? ['J+1', 'J+2'] : ['J+1'],
+      total_uses: repeatCount,
+      best_days: Array.from({ length: repeatCount - 1 }, (_, i) => `J+${i + 1}`),
       reuse_tips: mealType === 'snack' ? 'Se conserve dans une boîte hermétique' : 'Réchauffer au micro-ondes ou manger froid'
     };
 
     const defaultStorageInfo = {
       method: 'fridge' as const,
-      duration_days: mealType === 'snack' ? 3 : 2,
+      duration_days: Math.max(repeatCount, mealType === 'snack' ? 3 : 2),
       container: 'Boîte hermétique',
       tips: 'Conserver au réfrigérateur'
     };
@@ -439,7 +501,7 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
         is_generated: true,
         auto_generated: true,
         difficulty: 'easy',
-        servings: recipeData.reuse_info?.total_uses || defaultReuseInfo.total_uses,
+        servings: repeatCount, // Utilisé pour le nombre de portions/réutilisations
         max_prep_time: availableTime,
         source: 'ia',
         allergens: allergies ? allergies.split(", ") : [],
@@ -470,7 +532,9 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
       ...savedRecipe,
       reuse_info: recipeData.reuse_info || defaultReuseInfo,
       storage_info: recipeData.storage_info || defaultStorageInfo,
-      is_batch_cooking: recipeData.is_batch_cooking || false
+      is_batch_cooking: recipeData.is_batch_cooking || false,
+      portion_usage_estimate: portionUsageEstimate,
+      repeat_count: repeatCount
     } : null;
 
     if (saveError) {
@@ -517,15 +581,21 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
       }
     }
 
-    console.log("Successfully created meal:", savedRecipe.name, "with reuse info:", recipeData.reuse_info);
+    console.log("Successfully created meal:", savedRecipe.name, 
+      "portion_usage_estimate:", portionUsageEstimate, 
+      "repeat_count:", repeatCount,
+      "reuse_info:", recipeData.reuse_info);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         recipe: recipeWithReuseInfo,
-        message: `Recette "${savedRecipe.name}" générée - peut servir ${recipeData.reuse_info?.total_uses || defaultReuseInfo.total_uses} fois`,
+        message: `Recette "${savedRecipe.name}" générée - peut servir ${repeatCount} fois`,
         reuseInfo: recipeData.reuse_info || defaultReuseInfo,
-        storageInfo: recipeData.storage_info || defaultStorageInfo
+        storageInfo: recipeData.storage_info || defaultStorageInfo,
+        portionUsageEstimate,
+        repeatCount,
+        planningPreferences: { cookingFrequency, reuseLevel, includeWeekend }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
