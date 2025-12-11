@@ -3,18 +3,27 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Sparkles, Calendar, Check, Loader2, Cookie, Utensils, Sandwich } from "lucide-react";
+import { ArrowLeft, Sparkles, Calendar, Check, Loader2, Coffee, Utensils, Cookie, Moon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, startOfWeek, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
+import { MealSlot, MEAL_LABELS, MEAL_ORDER } from "@/lib/meals";
 
 interface DayPlan {
   date: string;
+  breakfast?: { name: string; id: string };
+  lunch?: { name: string; id: string };
   snack?: { name: string; id: string };
   dinner?: { name: string; id: string };
-  lunchbox?: { name: string; id: string };
 }
+
+const MEAL_ICONS: Record<MealSlot, typeof Coffee> = {
+  breakfast: Coffee,
+  lunch: Utensils,
+  snack: Cookie,
+  dinner: Moon,
+};
 
 export default function PlanningExpress() {
   const navigate = useNavigate();
@@ -45,28 +54,25 @@ export default function PlanningExpress() {
     const newPlan: DayPlan[] = [];
 
     try {
+      // Générer les 4 repas pour chaque jour
       for (const day of weekDays) {
-        for (const mealType of ["snack", "dinner"] as const) {
+        const dayPlan: DayPlan = { date: day.date };
+        
+        for (const mealSlot of MEAL_ORDER) {
           const { data, error } = await supabase.functions.invoke("generate-daily-meal", {
             body: {
               childId,
-              mealType,
+              mealType: mealSlot,
               date: day.date,
             },
           });
 
           if (!error && data?.recipe) {
-            const existingDay = newPlan.find(d => d.date === day.date);
-            if (existingDay) {
-              existingDay[mealType] = { name: data.recipe.name, id: data.recipe.id };
-            } else {
-              newPlan.push({
-                date: day.date,
-                [mealType]: { name: data.recipe.name, id: data.recipe.id },
-              });
-            }
+            dayPlan[mealSlot] = { name: data.recipe.name, id: data.recipe.id };
           }
         }
+        
+        newPlan.push(dayPlan);
       }
 
       setWeekPlan(newPlan);
@@ -100,8 +106,8 @@ export default function PlanningExpress() {
           <div className="flex items-center gap-3 mb-4">
             <Sparkles className="w-6 h-6 text-primary" />
             <p className="text-sm">
-              Générez automatiquement les goûters et repas du soir pour toute la semaine,
-              adaptés aux préférences et allergies de votre enfant.
+              Générez automatiquement les 4 repas quotidiens (petit-déjeuner, déjeuner, goûter, dîner)
+              pour toute la semaine, adaptés aux préférences et allergies de votre enfant.
             </p>
           </div>
           <Button 
@@ -139,18 +145,18 @@ export default function PlanningExpress() {
                     {day.dayName} {day.dayNumber}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2 text-xs">
-                      <Cookie className="w-4 h-4 text-pastel-yellow-foreground" />
-                      <span className={plan?.snack ? "" : "text-muted-foreground"}>
-                        {plan?.snack?.name || "Non planifié"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <Utensils className="w-4 h-4 text-primary" />
-                      <span className={plan?.dinner ? "" : "text-muted-foreground"}>
-                        {plan?.dinner?.name || "Non planifié"}
-                      </span>
-                    </div>
+                    {MEAL_ORDER.map((slot) => {
+                      const Icon = MEAL_ICONS[slot];
+                      const meal = plan?.[slot];
+                      return (
+                        <div key={slot} className="flex items-center gap-2 text-xs">
+                          <Icon className="w-4 h-4 text-muted-foreground" />
+                          <span className={meal ? "" : "text-muted-foreground"}>
+                            {meal?.name || "Non planifié"}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </Card>
               );

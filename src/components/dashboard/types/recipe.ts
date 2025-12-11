@@ -1,6 +1,7 @@
 import { HealthBenefitCategory } from './health';
 
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+// Nouveau système de types de repas - 4 repas fixes par jour
+export type MealType = 'breakfast' | 'lunch' | 'snack' | 'dinner';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type SpecialOccasion = 'birthday' | 'school' | 'quick' | 'party' | 'holiday';
 

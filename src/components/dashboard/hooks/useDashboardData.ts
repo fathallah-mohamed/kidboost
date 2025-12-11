@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { MealSlot, LunchType, determineLunchType, ChildMealConfig } from '@/lib/meals';
 
 interface Child {
   id: string;
@@ -22,10 +23,12 @@ interface MealData {
 
 interface DashboardData {
   todayMeals: {
+    breakfast: MealData;
+    lunch: MealData;
     snack: MealData;
     dinner: MealData;
-    lunchbox: MealData;
   };
+  lunchType: LunchType;
   plannedDays: string[];
   stats: {
     recipesReady: number;
@@ -44,7 +47,19 @@ interface DashboardData {
 
 export const useDashboardData = (userId: string) => {
   const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState<string | null>(null);
+  const [generating, setGenerating] = useState<MealSlot | null>(null);
+
+  const getChildMealConfig = useCallback((child: Child): ChildMealConfig => {
+    // Un enfant a un régime spécial s'il a des allergies
+    const hasSpecialDiet = Boolean(child.allergies && child.allergies.length > 0);
+    
+    // TODO: Ces valeurs devraient venir d'un calendrier ou des paramètres utilisateur
+    return {
+      hasSpecialDiet,
+      hasSchoolTripToday: false, // À implémenter avec un calendrier scolaire
+      eatsAtCanteen: false, // À implémenter dans les paramètres enfant
+    };
+  }, []);
 
   const fetchDashboardData = useCallback(async (child: Child): Promise<DashboardData> => {
     const today = new Date();
@@ -60,6 +75,10 @@ export const useDashboardData = (userId: string) => {
     
     const weekStartStr = format(weekStart, 'yyyy-MM-dd');
     const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
+
+    // Déterminer le type de déjeuner pour cet enfant
+    const childConfig = getChildMealConfig(child);
+    const lunchType = determineLunchType(childConfig);
 
     try {
       // 1. Fetch week's meal plans
@@ -80,20 +99,28 @@ export const useDashboardData = (userId: string) => {
         .gte('date', weekStartStr)
         .lte('date', weekEndStr);
 
-      // 2. Get today's meals
+      // 2. Get today's meals - structure avec 4 repas
       const todayMeals = {
+        breakfast: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
+        lunch: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
         snack: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
         dinner: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
-        lunchbox: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
       };
 
       if (mealPlans) {
         mealPlans
           .filter((p: any) => p.date === todayStr && p.recipe)
           .forEach((plan: any) => {
-            const mealType = plan.meal_time as keyof typeof todayMeals;
-            if (mealType in todayMeals) {
-              todayMeals[mealType] = {
+            // Convertir les anciens types vers le nouveau système
+            let mealSlot: MealSlot = plan.meal_time as MealSlot;
+            
+            // Lunchbox devient lunch dans le nouveau système
+            if (plan.meal_time === 'lunchbox') {
+              mealSlot = 'lunch';
+            }
+            
+            if (mealSlot in todayMeals) {
+              todayMeals[mealSlot] = {
                 name: plan.recipe.name,
                 prepTime: plan.recipe.preparation_time,
                 recipeId: plan.recipe.id,
@@ -165,6 +192,7 @@ export const useDashboardData = (userId: string) => {
 
       return {
         todayMeals,
+        lunchType,
         plannedDays,
         stats: {
           recipesReady: Math.min(recipeCount || 0, 7),
@@ -179,10 +207,12 @@ export const useDashboardData = (userId: string) => {
       console.error('Error fetching dashboard data:', error);
       return {
         todayMeals: {
+          breakfast: { name: null },
+          lunch: { name: null },
           snack: { name: null },
           dinner: { name: null },
-          lunchbox: { name: null },
         },
+        lunchType: 'home',
         plannedDays: [],
         stats: {
           recipesReady: 0,
@@ -194,13 +224,13 @@ export const useDashboardData = (userId: string) => {
         nutrition: { vegetables: 25, proteins: 25, starches: 30, dairy: 20 },
       };
     }
-  }, [userId]);
+  }, [userId, getChildMealConfig]);
 
   const generateMeal = useCallback(async (
     child: Child, 
-    mealType: 'snack' | 'dinner' | 'lunchbox'
+    mealSlot: MealSlot
   ): Promise<MealData | null> => {
-    setGenerating(mealType);
+    setGenerating(mealSlot);
     const todayStr = format(new Date(), 'yyyy-MM-dd');
 
     try {
@@ -208,7 +238,7 @@ export const useDashboardData = (userId: string) => {
         body: {
           childId: child.id,
           profileId: userId,
-          mealType,
+          mealType: mealSlot, // Utilise le nouveau système de slots
           date: todayStr,
         },
       });

@@ -3,11 +3,12 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Plus, Sparkles, ChefHat, Save, Cookie, Utensils, Sandwich, Loader2 } from "lucide-react";
+import { ArrowLeft, Sparkles, ChefHat, Save, Coffee, Utensils, Cookie, Moon, Loader2, Ban } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
+import { MealSlot, MEAL_LABELS, MEAL_ORDER, LunchType, determineLunchType, LUNCH_CONFIGS } from "@/lib/meals";
 
 interface PlannedMeal {
   id: string;
@@ -19,6 +20,20 @@ interface PlannedMeal {
   };
 }
 
+const MEAL_ICONS: Record<MealSlot, typeof Coffee> = {
+  breakfast: Coffee,
+  lunch: Utensils,
+  snack: Cookie,
+  dinner: Moon,
+};
+
+const MEAL_COLORS: Record<MealSlot, string> = {
+  breakfast: "bg-amber-100/50",
+  lunch: "bg-emerald-100/50",
+  snack: "bg-pastel-yellow/30",
+  dinner: "bg-primary/20",
+};
+
 export default function DayPlanning() {
   const navigate = useNavigate();
   const { date } = useParams<{ date: string }>();
@@ -28,14 +43,35 @@ export default function DayPlanning() {
   
   const [meals, setMeals] = useState<PlannedMeal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState<string | null>(null);
+  const [generating, setGenerating] = useState<MealSlot | null>(null);
+  const [lunchType, setLunchType] = useState<LunchType>('home');
 
   const formattedDate = date ? format(parseISO(date), "EEEE d MMMM", { locale: fr }) : "";
 
   useEffect(() => {
-    const fetchMeals = async () => {
+    const fetchData = async () => {
       if (!session?.user?.id || !date) return;
       
+      // Fetch child config for lunch type
+      if (childId) {
+        const { data: childData } = await supabase
+          .from("children_profiles")
+          .select("allergies")
+          .eq("id", childId)
+          .single();
+        
+        if (childData) {
+          const hasSpecialDiet = Boolean(childData.allergies && childData.allergies.length > 0);
+          const determinedLunchType = determineLunchType({
+            hasSpecialDiet,
+            hasSchoolTripToday: false, // TODO: implement calendar
+            eatsAtCanteen: false, // TODO: implement settings
+          });
+          setLunchType(determinedLunchType);
+        }
+      }
+      
+      // Fetch meals
       let query = supabase
         .from("meal_plans")
         .select(`
@@ -58,22 +94,22 @@ export default function DayPlanning() {
       setLoading(false);
     };
 
-    fetchMeals();
+    fetchData();
   }, [session?.user?.id, date, childId]);
 
-  const handleGenerateMeal = async (mealType: string) => {
+  const handleGenerateMeal = async (mealSlot: MealSlot) => {
     if (!session?.user?.id || !childId || !date) {
       toast.error("Informations manquantes");
       return;
     }
 
-    setGenerating(mealType);
+    setGenerating(mealSlot);
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-daily-meal", {
         body: {
           childId,
-          mealType,
+          mealType: mealSlot,
           date,
         },
       });
@@ -104,13 +140,27 @@ export default function DayPlanning() {
     }
   };
 
-  const mealTypes = [
-    { type: "snack", label: "Goûter", icon: Cookie, color: "bg-pastel-yellow/30" },
-    { type: "dinner", label: "Repas du soir", icon: Utensils, color: "bg-primary/20" },
-    { type: "lunchbox", label: "Lunchbox", icon: Sandwich, color: "bg-pastel-green/30" },
-  ];
+  const getMealForSlot = (slot: MealSlot) => {
+    // Handle legacy lunchbox -> lunch conversion
+    if (slot === 'lunch') {
+      return meals.find(m => m.meal_time === 'lunch' || m.meal_time === 'lunchbox');
+    }
+    return meals.find(m => m.meal_time === slot);
+  };
 
-  const getMealForType = (type: string) => meals.find(m => m.meal_time === type);
+  const canGenerateForSlot = (slot: MealSlot): boolean => {
+    if (slot === 'lunch') {
+      return LUNCH_CONFIGS[lunchType].canGenerate;
+    }
+    return true;
+  };
+
+  const getLabelForSlot = (slot: MealSlot): string => {
+    if (slot === 'lunch') {
+      return LUNCH_CONFIGS[lunchType].label;
+    }
+    return MEAL_LABELS[slot];
+  };
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -131,19 +181,33 @@ export default function DayPlanning() {
           </div>
         ) : (
           <div className="space-y-3">
-            {mealTypes.map((mealType) => {
-              const meal = getMealForType(mealType.type);
-              const Icon = mealType.icon;
-              const isGenerating = generating === mealType.type;
+            {MEAL_ORDER.map((slot) => {
+              const meal = getMealForSlot(slot);
+              const Icon = MEAL_ICONS[slot];
+              const isGenerating = generating === slot;
+              const canGenerate = canGenerateForSlot(slot);
+              const label = getLabelForSlot(slot);
 
               return (
-                <Card key={mealType.type} className={`p-4 ${mealType.color}`}>
+                <Card key={slot} className={`p-4 ${MEAL_COLORS[slot]}`}>
                   <div className="flex items-center gap-3 mb-3">
                     <Icon className="w-5 h-5" />
-                    <span className="font-semibold">{mealType.label}</span>
+                    <span className="font-semibold">{label}</span>
+                    {!canGenerate && (
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        Aucune action requise
+                      </span>
+                    )}
                   </div>
 
-                  {meal ? (
+                  {!canGenerate ? (
+                    <div className="p-3 bg-background/50 rounded-lg flex items-center gap-2">
+                      <Ban className="w-4 h-4 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground italic">
+                        {LUNCH_CONFIGS[lunchType].description}
+                      </p>
+                    </div>
+                  ) : meal ? (
                     <div className="p-3 bg-background/80 rounded-lg">
                       <div className="flex items-center justify-between">
                         <div>
@@ -155,7 +219,7 @@ export default function DayPlanning() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/dashboard/recipe/${meal.recipe?.id}`)}
+                          onClick={() => navigate(`/recipe/${meal.recipe?.id}`)}
                         >
                           Voir
                         </Button>
@@ -167,30 +231,32 @@ export default function DayPlanning() {
                     </p>
                   )}
 
-                  <div className="flex gap-2 mt-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => navigate(`/recipes?select=true&date=${date}&mealType=${mealType.type}`)}
-                    >
-                      <ChefHat className="w-4 h-4 mr-1" />
-                      Mes recettes
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1"
-                      disabled={isGenerating}
-                      onClick={() => handleGenerateMeal(mealType.type)}
-                    >
-                      {isGenerating ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-4 h-4 mr-1" />
-                      )}
-                      IA
-                    </Button>
-                  </div>
+                  {canGenerate && (
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => navigate(`/recipes?select=true&date=${date}&mealType=${slot}`)}
+                      >
+                        <ChefHat className="w-4 h-4 mr-1" />
+                        Mes recettes
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        disabled={isGenerating}
+                        onClick={() => handleGenerateMeal(slot)}
+                      >
+                        {isGenerating ? (
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-4 h-4 mr-1" />
+                        )}
+                        IA
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               );
             })}
