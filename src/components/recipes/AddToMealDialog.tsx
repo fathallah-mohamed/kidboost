@@ -6,10 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { Loader2, Calendar as CalendarIcon, User } from "lucide-react";
 import { format, addDays, startOfWeek } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useChild } from "@/contexts/ChildContext";
 
 interface AddToMealDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export const AddToMealDialog = ({
   showLunchbox,
   onSuccess 
 }: AddToMealDialogProps) => {
+  const { selectedChild } = useChild();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [mealSlot, setMealSlot] = useState(recipeMealType || "dinner");
   const [saving, setSaving] = useState(false);
@@ -48,6 +50,11 @@ export const AddToMealDialog = ({
   });
 
   const handleAdd = async () => {
+    if (!selectedChild) {
+      toast.error("Veuillez sélectionner un enfant");
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase.from("meal_plans").insert({
@@ -55,11 +62,12 @@ export const AddToMealDialog = ({
         recipe_id: recipeId,
         date: format(selectedDate, "yyyy-MM-dd"),
         meal_time: mealSlot,
+        child_id: selectedChild.id,
       });
 
       if (error) throw error;
 
-      toast.success("Recette ajoutée au planning !");
+      toast.success(`Recette ajoutée au planning de ${selectedChild.name} !`);
       onSuccess();
       onOpenChange(false);
     } catch (error) {
@@ -80,6 +88,12 @@ export const AddToMealDialog = ({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Ajouter au planning</DialogTitle>
+          {selectedChild && (
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              <User className="w-3 h-3" />
+              Pour {selectedChild.name}
+            </p>
+          )}
         </DialogHeader>
 
         <div className="space-y-4 pt-2">

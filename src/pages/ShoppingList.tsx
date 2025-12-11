@@ -5,16 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { 
   ArrowLeft, Sparkles, Trash2, Download, ShoppingCart, Loader2,
   Apple, Carrot, Drumstick, Wheat, Milk, Cookie, Fish, Egg, 
-  CheckSquare, Square, RefreshCw, Calendar, ChefHat
+  CheckSquare, Square, RefreshCw, Calendar, ChefHat, Users, User
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek, addDays, isSameDay, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import { ChildSelector } from "@/components/planning/ChildSelector";
+import { GlobalChildSelector } from "@/components/common/GlobalChildSelector";
+import { useChild } from "@/contexts/ChildContext";
 import { LunchType, determineLunchType, ChildMealConfig } from "@/lib/meals";
 
 interface Ingredient {
@@ -36,17 +39,10 @@ interface ShoppingItem {
   recipeNames: string[];
 }
 
-interface Child {
-  id: string;
-  name: string;
-  regime_special: boolean;
-  dejeuner_habituel: string;
-  sortie_scolaire_dates: string[];
-}
-
 interface PlannedMeal {
   date: string;
   meal_time: string;
+  child_id: string | null;
   recipe: {
     id: string;
     name: string;
@@ -158,12 +154,13 @@ export default function ShoppingList() {
   const navigate = useNavigate();
   const session = useSession();
   const [searchParams] = useSearchParams();
+  const { selectedChild, children } = useChild();
   
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<Date | null>(null);
+  const [familyMode, setFamilyMode] = useState(false); // Mode liste familiale fusionnée
 
   // Week dates
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -199,12 +196,40 @@ export default function ShoppingList() {
   }, [session?.user?.id]);
 
   // Check if meal should be included (not canteen, lunchbox only if applicable)
-  const shouldIncludeMeal = useCallback((meal: PlannedMeal, child: Child | null): boolean => {
-    if (!child) return true;
+  const shouldIncludeMeal = useCallback((meal: PlannedMeal): boolean => {
+    // In family mode, check all children
+    if (familyMode) {
+      const child = children.find(c => c.id === meal.child_id);
+      if (!child) return true;
+      
+      if (meal.meal_time === 'lunch') {
+        const schoolTripDates = child.sortie_scolaire_dates || [];
+        const hasSchoolTripToday = schoolTripDates.some((tripDate) => {
+          try {
+            return isSameDay(parseISO(tripDate), parseISO(meal.date));
+          } catch {
+            return false;
+          }
+        });
+
+        const config: ChildMealConfig = {
+          hasSpecialDiet: child.regime_special || false,
+          hasSchoolTripToday,
+          eatsAtCanteen: child.dejeuner_habituel === "cantine",
+        };
+
+        const lunchType = determineLunchType(config);
+        if (lunchType === 'canteen') return false;
+      }
+      return true;
+    }
+    
+    // Single child mode
+    if (!selectedChild) return true;
     
     // Check lunch type for this day
     if (meal.meal_time === 'lunch') {
-      const schoolTripDates = child.sortie_scolaire_dates || [];
+      const schoolTripDates = selectedChild.sortie_scolaire_dates || [];
       const hasSchoolTripToday = schoolTripDates.some((tripDate) => {
         try {
           return isSameDay(parseISO(tripDate), parseISO(meal.date));
@@ -214,9 +239,9 @@ export default function ShoppingList() {
       });
 
       const config: ChildMealConfig = {
-        hasSpecialDiet: child.regime_special || false,
+        hasSpecialDiet: selectedChild.regime_special || false,
         hasSchoolTripToday,
-        eatsAtCanteen: child.dejeuner_habituel === "cantine",
+        eatsAtCanteen: selectedChild.dejeuner_habituel === "cantine",
       };
 
       const lunchType = determineLunchType(config);
@@ -228,7 +253,7 @@ export default function ShoppingList() {
     }
     
     return true;
-  }, []);
+  }, [selectedChild, familyMode, children]);
 
   // Generate shopping list from planned meals
   const handleGenerateList = async () => {
@@ -245,14 +270,15 @@ export default function ShoppingList() {
         .select(`
           date,
           meal_time,
+          child_id,
           recipe:recipes(id, name, ingredients)
         `)
         .eq("profile_id", session.user.id)
         .gte("date", startDate)
         .lte("date", endDate);
 
-      // Filter by child if selected
-      if (selectedChild) {
+      // Filter by child if not in family mode
+      if (!familyMode && selectedChild) {
         query = query.eq("child_id", selectedChild.id);
       }
 
@@ -268,7 +294,7 @@ export default function ShoppingList() {
 
       // Filter meals based on lunch type rules
       const filteredMeals = (meals as PlannedMeal[]).filter(meal => 
-        meal.recipe && shouldIncludeMeal(meal, selectedChild)
+        meal.recipe && shouldIncludeMeal(meal)
       );
 
       if (filteredMeals.length === 0) {
@@ -363,7 +389,9 @@ export default function ShoppingList() {
 
       setItems(newItems);
       setLastGeneratedAt(new Date());
-      toast.success(`Liste générée : ${newItems.length} ingrédients à partir de ${filteredMeals.length} repas`);
+      
+      const modeLabel = familyMode ? "toute la famille" : selectedChild?.name || "vos repas";
+      toast.success(`Liste générée pour ${modeLabel} : ${newItems.length} ingrédients à partir de ${filteredMeals.length} repas`);
     } catch (error) {
       console.error("Error generating list:", error);
       toast.error("Erreur lors de la génération");
@@ -456,8 +484,6 @@ export default function ShoppingList() {
     return { total, checked, remaining: total - checked };
   }, [items]);
 
-  const childIdFromParams = searchParams.get("childId");
-
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-lg mx-auto space-y-4">
@@ -474,13 +500,42 @@ export default function ShoppingList() {
           </div>
         </div>
 
-        {/* Child selector */}
-        {session?.user?.id && (
-          <ChildSelector
-            userId={session.user.id}
-            selectedChildId={selectedChild?.id || childIdFromParams}
-            onSelectChild={(child) => setSelectedChild(child as Child | null)}
-          />
+        {/* Mode selector: Single child vs Family */}
+        {children.length > 1 && (
+          <Card className="p-4 bg-muted/30">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                <Label htmlFor="family-mode" className="text-sm font-medium">
+                  Liste familiale fusionnée
+                </Label>
+              </div>
+              <Switch
+                id="family-mode"
+                checked={familyMode}
+                onCheckedChange={setFamilyMode}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {familyMode 
+                ? "Les ingrédients de tous les enfants seront regroupés"
+                : "Afficher uniquement les ingrédients pour l'enfant sélectionné"
+              }
+            </p>
+          </Card>
+        )}
+
+        {/* Child selector (only if not in family mode) */}
+        {!familyMode && (
+          <Card className="p-3 bg-primary/5 border-primary/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">Courses pour :</span>
+              </div>
+              <GlobalChildSelector variant="compact" showLabel={false} />
+            </div>
+          </Card>
         )}
 
         {/* Generate button */}
@@ -490,7 +545,9 @@ export default function ShoppingList() {
             <div className="flex-1">
               <p className="text-sm">
                 Génère automatiquement la liste des ingrédients à partir des repas planifiés.
-                {selectedChild && (
+                {familyMode ? (
+                  <span className="text-muted-foreground"> Les repas à la cantine sont exclus pour chaque enfant.</span>
+                ) : selectedChild && (
                   <span className="text-muted-foreground"> Les repas à la cantine sont exclus.</span>
                 )}
               </p>
