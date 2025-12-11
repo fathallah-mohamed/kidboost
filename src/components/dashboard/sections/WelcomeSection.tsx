@@ -402,9 +402,9 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
             </p>
           </div>
           <Button
-            variant="secondary"
+            variant="ghost"
             size="sm"
-            className="h-8 px-3 text-xs gap-1.5"
+            className="h-8 px-3 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
             onClick={() => navigate("/profile-settings")}
           >
             <Settings className="w-3.5 h-3.5" />
