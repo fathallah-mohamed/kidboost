@@ -144,19 +144,29 @@ export function WeeklyPlanningGrid({
   };
 
   // Determine if a meal slot is locked (can't change the type)
+  // Only school trips are fully locked - canteen can be overridden manually
   const isSlotLocked = (dateString: string, slot: MealSlot): boolean => {
     if (slot !== 'lunch') return false;
     const lunchType = getLunchTypeForDay(dateString);
-    // Canteen and school trip are fully locked
-    return lunchType === 'canteen' || lunchType === 'school_trip';
+    // Only school trips are fully locked
+    return lunchType === 'school_trip';
   };
 
   // Determine if a meal slot can have its recipe modified
+  // Canteen can be overridden for occasional home lunches
   const canModifyRecipe = (dateString: string, slot: MealSlot): boolean => {
     if (slot !== 'lunch') return true;
     const lunchType = getLunchTypeForDay(dateString);
-    // Canteen can never be modified
-    return lunchType !== 'canteen';
+    // School trips cannot be modified to ensure lunchbox is prepared
+    return lunchType !== 'school_trip';
+  };
+
+  // Check if a canteen slot has been manually overridden
+  const isCanteenOverridden = (dateString: string): boolean => {
+    const config = getLunchConfigForDay(dateString);
+    if (config?.lunchType !== 'canteen') return false;
+    const meal = getMealForSlot(dateString, 'lunch');
+    return !!meal?.recipe;
   };
 
   // Get background style for a meal slot
@@ -219,13 +229,17 @@ export function WeeklyPlanningGrid({
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {MEAL_ORDER.map((slot) => {
                   const meal = getMealForSlot(day.dateString, slot);
+                  const isCanteenOverride = isCanteenOverridden(day.dateString);
                   const Icon = slot === 'lunch' && isLunchboxDay(day.dateString) ? Backpack : MEAL_ICONS[slot];
-                  const label = slot === 'lunch' ? getLunchLabel(day.dateString) : MEAL_LABELS_SHORT[slot];
-                  const canGenerate = slot === 'lunch' ? canGenerateLunchForDay(day.dateString) : true;
+                  // Show different label if canteen is overridden
+                  const label = slot === 'lunch' 
+                    ? (isCanteenOverride ? 'Déj. maison (exceptionnel)' : getLunchLabel(day.dateString)) 
+                    : MEAL_LABELS_SHORT[slot];
+                  const canGenerate = slot === 'lunch' ? (canGenerateLunchForDay(day.dateString) || lunchType === 'canteen') : true;
                   const isCanteen = slot === 'lunch' && lunchType === 'canteen';
                   const isLocked = isSlotLocked(day.dateString, slot);
                   const canModify = canModifyRecipe(day.dateString, slot);
-                  const slotStyle = getSlotStyle(day.dateString, slot, !!meal);
+                  const slotStyle = getSlotStyle(day.dateString, slot, !!meal || isCanteenOverride);
 
                   return (
                     <div
@@ -301,12 +315,20 @@ export function WeeklyPlanningGrid({
                             </DropdownMenu>
                           )}
                         </div>
-                      ) : isCanteen ? (
-                        <div className="flex items-center gap-1">
+                      ) : isCanteen && !isCanteenOverridden(day.dateString) ? (
+                        <div className="space-y-1">
                           <p className="text-xs text-slate-500 dark:text-slate-400 italic">
                             Repas à la cantine
                           </p>
-                          <Lock className="w-3 h-3 text-slate-400" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full h-auto py-1 text-xs text-muted-foreground hover:text-primary"
+                            onClick={() => onAddRecipe(day.dateString, slot)}
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Remplacer par maison
+                          </Button>
                         </div>
                       ) : canGenerate ? (
                         <Button

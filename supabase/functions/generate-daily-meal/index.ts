@@ -259,15 +259,19 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe.`
       .maybeSingle();
 
     if (existingPlan) {
-      await supabase
+      const { error: updateError } = await supabase
         .from('meal_plans')
         .update({
           recipe_id: savedRecipe.id,
           is_auto_generated: true
         })
         .eq('id', existingPlan.id);
+      
+      if (updateError) {
+        console.error("Error updating meal_plan:", updateError);
+      }
     } else {
-      await supabase
+      const { error: insertError } = await supabase
         .from('meal_plans')
         .insert({
           profile_id: profileId,
@@ -277,6 +281,10 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe.`
           meal_time: mealType,
           is_auto_generated: true
         });
+      
+      if (insertError) {
+        console.error("Error inserting meal_plan:", insertError);
+      }
     }
 
     console.log("Successfully created meal:", savedRecipe.name);
