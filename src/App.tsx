@@ -17,6 +17,7 @@ import Planning from "./pages/Planning";
 import ShoppingListPage from "./pages/ShoppingList";
 import DayPlanning from "./pages/DayPlanning";
 import Children from "./pages/Children";
+import ProfileSettings from "./pages/ProfileSettings";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { useSession } from "@supabase/auth-helpers-react";
 import { useEffect, useState } from "react";
@@ -118,6 +119,7 @@ const AppRoutes = () => {
       <Route path="/planning/day/:date" element={session ? <DayPlanning /> : <Navigate to="/login" />} />
       <Route path="/shopping-list" element={session ? <ShoppingListPage /> : <Navigate to="/login" />} />
       <Route path="/children" element={session ? <Children /> : <Navigate to="/login" />} />
+      <Route path="/profile-settings" element={session ? <ProfileSettings /> : <Navigate to="/login" />} />
       
       <Route 
         path="/dashboard" 

@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Calendar, ShoppingCart, ChefHat, CheckCircle } from "lucide-react";
+import { AlertCircle, Calendar, ShoppingCart, ChefHat, CheckCircle, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 
 interface Task {
@@ -29,23 +30,24 @@ export const TodoNow = ({
   shoppingListReady,
   onAction,
 }: TodoNowProps) => {
+  const navigate = useNavigate();
   const tasks: Task[] = [];
 
   if (daysPlanned === 0) {
     tasks.push({
       id: "no-planning",
-      message: "Planifiez la semaine",
-      action: "Go",
-      route: "planner",
+      message: "Aucun jour planifié cette semaine",
+      action: "Planifier",
+      route: "/planning",
       icon: Calendar,
       priority: "high",
     });
   } else if (daysPlanned < totalDays) {
     tasks.push({
       id: "incomplete-planning",
-      message: `${daysPlanned}/${totalDays} jours`,
+      message: `${totalDays - daysPlanned} jour(s) sans planning`,
       action: "Compléter",
-      route: "planner",
+      route: "/planning",
       icon: Calendar,
       priority: "medium",
     });
@@ -54,9 +56,9 @@ export const TodoNow = ({
   if (recipesReady < totalRecipes) {
     tasks.push({
       id: "incomplete-recipes",
-      message: `${recipesReady}/${totalRecipes} recettes`,
-      action: "Générer",
-      route: "recipes",
+      message: `${totalRecipes - recipesReady} recette(s) manquante(s)`,
+      action: "Ajouter",
+      route: "/recipes",
       icon: ChefHat,
       priority: "medium",
     });
@@ -65,59 +67,79 @@ export const TodoNow = ({
   if (!shoppingListReady && daysPlanned > 0) {
     tasks.push({
       id: "shopping-list",
-      message: "Liste de courses",
+      message: "Liste de courses à créer",
       action: "Créer",
-      route: "shopping",
+      route: "/shopping-list",
       icon: ShoppingCart,
       priority: "low",
     });
   }
 
+  const handleTaskAction = (route: string) => {
+    navigate(route);
+  };
+
   if (tasks.length === 0) {
     return (
-      <Card className="px-2 py-1.5 bg-gradient-to-br from-pastel-green/20 to-pastel-green/5 border-pastel-green/30">
-        <div className="flex items-center gap-1.5">
-          <CheckCircle className="w-3.5 h-3.5 text-pastel-green-foreground" />
-          <p className="text-xs font-medium text-pastel-green-foreground">
-            Tout est prêt ! 🎉
+      <Card className="px-3 py-2.5 bg-gradient-to-br from-emerald-100/50 to-emerald-50/30 dark:from-emerald-900/30 dark:to-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/50">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            Tout est prêt pour la semaine ! 🎉
           </p>
         </div>
       </Card>
     );
   }
 
-  const priorityColors = {
-    high: "border-l-destructive",
-    medium: "border-l-pastel-yellow",
-    low: "border-l-muted",
+  const priorityConfig = {
+    high: {
+      border: "border-l-red-500",
+      bg: "bg-red-50/50 dark:bg-red-950/20",
+      dot: "bg-red-500",
+    },
+    medium: {
+      border: "border-l-amber-500",
+      bg: "bg-amber-50/50 dark:bg-amber-950/20",
+      dot: "bg-amber-500",
+    },
+    low: {
+      border: "border-l-muted",
+      bg: "bg-muted/30",
+      dot: "bg-muted-foreground/50",
+    },
   };
 
   return (
-    <Card className="p-2 space-y-1.5 bg-gradient-to-br from-pastel-yellow/10 to-card">
-      <div className="flex items-center gap-1">
-        <AlertCircle className="w-3.5 h-3.5 text-pastel-yellow-foreground" />
-        <h3 className="font-bold text-xs">À faire</h3>
+    <Card className="p-3 space-y-2 bg-gradient-to-br from-amber-50/50 to-background dark:from-amber-950/20 dark:to-background">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+        <h3 className="font-bold text-sm">À faire</h3>
+        <span className="text-[10px] text-muted-foreground">({tasks.length} tâche{tasks.length > 1 ? 's' : ''})</span>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {tasks.map((task) => {
           const Icon = task.icon;
+          const config = priorityConfig[task.priority];
           return (
             <div
               key={task.id}
-              className={`flex items-center justify-between px-2 py-1 bg-card rounded border-l-2 ${priorityColors[task.priority]}`}
+              className={`flex items-center justify-between px-2.5 py-2 rounded-lg border-l-3 ${config.border} ${config.bg}`}
             >
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                <Icon className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
+                <Icon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                 <span className="text-xs truncate">{task.message}</span>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-[10px] h-5 px-1.5 ml-1"
-                onClick={() => onAction(task.route)}
+                className="text-xs h-7 px-2 gap-1 hover:bg-primary/10"
+                onClick={() => handleTaskAction(task.route)}
               >
                 {task.action}
+                <ArrowRight className="w-3 h-3" />
               </Button>
             </div>
           );

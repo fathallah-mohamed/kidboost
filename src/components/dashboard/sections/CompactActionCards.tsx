@@ -12,34 +12,38 @@ export const CompactActionCards = ({ onSelectAction, loading }: CompactActionCar
       icon: Sparkles,
       title: "Planning Express",
       action: "quick-plan",
-      color: "bg-primary/20 hover:bg-primary/30",
+      gradient: "from-primary/30 to-primary/10",
       iconColor: "text-primary",
+      hoverBg: "hover:from-primary/40 hover:to-primary/20",
     },
     {
       icon: ChefHat,
       title: "Recettes",
       action: "recipes",
-      color: "bg-accent/20 hover:bg-accent/30",
-      iconColor: "text-accent",
+      gradient: "from-accent/30 to-accent/10",
+      iconColor: "text-accent-foreground",
+      hoverBg: "hover:from-accent/40 hover:to-accent/20",
     },
     {
       icon: Calendar,
       title: "Planifier",
       action: "planner",
-      color: "bg-pastel-purple/30 hover:bg-pastel-purple/40",
-      iconColor: "text-pastel-purple-foreground",
+      gradient: "from-violet-200/50 to-violet-100/30 dark:from-violet-900/40 dark:to-violet-950/20",
+      iconColor: "text-violet-600 dark:text-violet-400",
+      hoverBg: "hover:from-violet-200/70 hover:to-violet-100/50",
     },
     {
       icon: ShoppingCart,
       title: "Courses",
       action: "shopping",
-      color: "bg-pastel-green/30 hover:bg-pastel-green/40",
-      iconColor: "text-pastel-green-foreground",
+      gradient: "from-emerald-200/50 to-emerald-100/30 dark:from-emerald-900/40 dark:to-emerald-950/20",
+      iconColor: "text-emerald-600 dark:text-emerald-400",
+      hoverBg: "hover:from-emerald-200/70 hover:to-emerald-100/50",
     },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-1.5">
+    <div className="grid grid-cols-4 gap-2">
       {actions.map((item, index) => {
         const Icon = item.icon;
         return (
@@ -47,11 +51,11 @@ export const CompactActionCards = ({ onSelectAction, loading }: CompactActionCar
             key={index}
             variant="ghost"
             disabled={item.action === "quick-plan" && loading}
-            className={`flex flex-col items-center justify-center gap-0.5 h-14 px-1 rounded-lg ${item.color} transition-all hover:scale-[1.02] active:scale-[0.98]`}
+            className={`flex flex-col items-center justify-center gap-1 h-16 px-2 rounded-xl bg-gradient-to-br ${item.gradient} ${item.hoverBg} transition-all hover:scale-[1.03] active:scale-[0.97] border-0`}
             onClick={() => onSelectAction(item.action)}
           >
             <Icon className={`w-5 h-5 ${item.iconColor}`} />
-            <span className="text-[9px] font-medium text-foreground leading-tight text-center">{item.title}</span>
+            <span className="text-[10px] font-semibold text-foreground leading-tight text-center">{item.title}</span>
           </Button>
         );
       })}

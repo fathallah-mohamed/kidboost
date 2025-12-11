@@ -11,14 +11,23 @@ import { CompactActionCards } from "./CompactActionCards";
 import { MiniCalendar } from "./MiniCalendar";
 import { NutritionBalance } from "./NutritionBalance";
 import { QuickStartGuide } from "./QuickStartGuide";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { MealSlot, LunchType, determineLunchType } from "@/lib/meals";
+import { Users, Settings, ChevronDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Child {
   id: string;
@@ -35,6 +44,7 @@ interface MealData {
   name: string | null;
   prepTime?: number;
   recipeId?: string;
+  difficulty?: string;
 }
 
 interface WelcomeSectionProps {
@@ -172,6 +182,17 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     }
   };
 
+  const handleEditRecipe = (slot: MealSlot) => {
+    const meal = dashboardData.todayMeals[slot];
+    if (meal?.recipeId) {
+      navigate(`/recipe/${meal.recipeId}?edit=true`);
+    }
+  };
+
+  const handleAddRecipe = (slot: MealSlot) => {
+    navigate(`/recipes?mealType=${slot}`);
+  };
+
   const handleReplaceRecipe = async (slot: MealSlot) => {
     if (!selectedChild) return;
     
@@ -229,9 +250,11 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     }));
   };
 
-  const handleChildChange = (child: Child) => {
-    setSelectedChild(child);
-    setShowChildSelector(false);
+  const handleChildChange = (childId: string) => {
+    const child = children.find(c => c.id === childId);
+    if (child) {
+      setSelectedChild(child);
+    }
   };
 
   // Show QuickStartGuide if no children
@@ -239,10 +262,10 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     return (
       <div className="space-y-4 animate-fade-in">
         <div className="space-y-1">
-          <h1 className="text-base md:text-lg font-bold leading-tight">
+          <h1 className="text-lg md:text-xl font-bold leading-tight">
             Bonjour {username || "Parent"} 👋
           </h1>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Commencez par créer le profil de votre enfant pour personnaliser Kidboost.
           </p>
         </div>
@@ -252,17 +275,39 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   }
 
   return (
-    <div className="space-y-2 animate-fade-in pb-2">
-      {/* Smart welcome + Child Profile Badge */}
-      <div className="space-y-1.5">
+    <div className="space-y-3 animate-fade-in pb-4">
+      {/* Header: Welcome + Child Selector */}
+      <div className="space-y-2">
         <div>
-          <h1 className="text-base md:text-lg font-bold leading-tight">
+          <h1 className="text-lg md:text-xl font-bold leading-tight">
             Bonjour {username || "Parent"} 👋
           </h1>
-          <p className="text-xs text-muted-foreground">
-            Voici ce que Kidboost a préparé pour {selectedChild?.name} aujourd'hui.
+          <p className="text-sm text-muted-foreground">
+            Voici ce que Kidboost a préparé pour votre famille aujourd'hui.
           </p>
         </div>
+
+        {/* Child Selector Dropdown */}
+        {children.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Enfant :</span>
+            <Select
+              value={selectedChild?.id || ""}
+              onValueChange={handleChildChange}
+            >
+              <SelectTrigger className="w-48 h-9">
+                <SelectValue placeholder="Sélectionner un enfant" />
+              </SelectTrigger>
+              <SelectContent className="bg-background">
+                {children.map((child) => (
+                  <SelectItem key={child.id} value={child.id}>
+                    {child.name} ({calculateAge(child.birth_date)} ans)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {selectedChild && (
           <ChildProfileBadge
@@ -284,8 +329,34 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
           onViewRecipe={handleViewRecipe}
           onReplaceRecipe={handleReplaceRecipe}
           onAddToList={handleAddToList}
+          onEditRecipe={handleEditRecipe}
+          onAddRecipe={handleAddRecipe}
         />
       )}
+
+      {/* Manage Children & Preferences Card */}
+      <Card className="p-3 bg-gradient-to-br from-secondary/30 to-secondary/10 border-secondary/40">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-secondary/50 rounded-lg">
+            <Users className="w-5 h-5 text-secondary-foreground" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-sm">Gérer les enfants & préférences</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Modifiez les informations, allergies, préférences alimentaires, repas habituels et réglages de votre famille.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 px-3 text-xs gap-1.5"
+            onClick={() => navigate("/profile-settings")}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Gérer
+          </Button>
+        </div>
+      </Card>
 
       {/* Compact Quick Actions */}
       <CompactActionCards onSelectAction={handleActionSelect} loading={quickPlanLoading} />
@@ -301,11 +372,11 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
       />
 
       {/* Two columns: Calendar + Nutrition */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <MiniCalendar
           plannedDays={dashboardData.plannedDays}
           onDayClick={handleDayClick}
-          onViewFull={() => navigate("/dashboard/planner")}
+          onViewFull={() => navigate("/planning")}
         />
         <NutritionBalance
           vegetables={dashboardData.nutrition.vegetables}
@@ -336,7 +407,10 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
                 key={child.id}
                 variant={selectedChild?.id === child.id ? "default" : "outline"}
                 className="w-full justify-start"
-                onClick={() => handleChildChange(child)}
+                onClick={() => {
+                  handleChildChange(child.id);
+                  setShowChildSelector(false);
+                }}
               >
                 {child.name} ({calculateAge(child.birth_date)} ans)
               </Button>
