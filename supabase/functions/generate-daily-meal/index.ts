@@ -36,6 +36,37 @@ serve(async (req) => {
       throw new Error("Enfant non trouvé");
     }
 
+    // Get recent recipes for this child to avoid duplicates (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const { data: recentRecipes } = await supabase
+      .from('recipes')
+      .select('name, meal_type')
+      .eq('child_id', childId)
+      .eq('meal_type', mealType)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    const recentRecipeNames = recentRecipes?.map(r => r.name) || [];
+    console.log(`Found ${recentRecipeNames.length} recent ${mealType} recipes to avoid`);
+
+    // Get all-time most used recipes for variety
+    const { data: frequentRecipes } = await supabase
+      .from('meal_statistics')
+      .select('recipes(name)')
+      .eq('child_id', childId)
+      .order('frequency', { ascending: false })
+      .limit(10);
+
+    const frequentRecipeNames = frequentRecipes
+      ?.map(r => (r.recipes as any)?.name)
+      .filter(Boolean) || [];
+
+    // Combine all recipes to exclude
+    const recipesToExclude = [...new Set([...recentRecipeNames, ...frequentRecipeNames])];
+
     const childAge = new Date().getFullYear() - new Date(child.birth_date).getFullYear();
     
     // Use context if provided, otherwise fall back to child profile
@@ -51,33 +82,50 @@ serve(async (req) => {
       ? context.preferences.join(", ")
       : [...(child.aliments_preferes || []), ...(child.preferences_gout || [])].filter(Boolean).join(", ");
     
+    const dislikes = (child.dislikes || []).filter(Boolean).join(", ");
+    const mealObjectives = (child.meal_objectives || []).filter(Boolean).join(", ");
+    
     const availableTime = context?.availableTime || child.available_time || 20;
-    const equipment = context?.equipment?.length > 0 ? context.equipment.join(", ") : "";
+    const equipment = context?.equipment?.length > 0 ? context.equipment.join(", ") : (child.materiel_disponible || []).filter(Boolean).join(", ");
+    const difficulty = child.difficulte_souhaitee || 'facile';
     const parentStyle = context?.parentStyle?.length > 0 ? context.parentStyle.join(", ") : "";
     const familyAllergens = context?.familyAllergens?.length > 0 ? context.familyAllergens.join(", ") : "";
 
+    // Get current month for seasonality
+    const currentMonth = new Date().getMonth() + 1;
+    const seasonLabels: Record<number, string> = {
+      1: 'hiver', 2: 'hiver', 3: 'printemps', 4: 'printemps', 5: 'printemps',
+      6: 'été', 7: 'été', 8: 'été', 9: 'automne', 10: 'automne', 11: 'automne', 12: 'hiver'
+    };
+    const currentSeason = seasonLabels[currentMonth];
+
     // Meal type labels and specific instructions
-    const mealConfigs: Record<string, { label: string; instructions: string }> = {
+    const mealConfigs: Record<string, { label: string; instructions: string; examples: string }> = {
       'breakfast': {
         label: 'petit-déjeuner',
-        instructions: 'Recette simple et rapide pour le matin, équilibrée et adaptée aux enfants. Peut inclure céréales, fruits, laitages, tartines.',
+        instructions: 'Recette simple et rapide pour bien commencer la journée. Énergétique et équilibrée.',
+        examples: 'Exemples variés: pancakes aux fruits, smoothie bowl, tartines créatives, œufs brouillés, porridge aux fruits, crêpes légères, muffins maison, yaourt granola maison',
       },
       'lunch': {
         label: 'déjeuner',
-        instructions: 'Repas complet et équilibré pour le midi. Inclure protéines, légumes et féculents.',
+        instructions: 'Repas complet et équilibré pour le midi. Doit inclure protéines, légumes et féculents.',
+        examples: 'Exemples variés: gratin de légumes, pâtes au pesto maison, riz sauté aux légumes, quiche aux légumes, curry doux, risotto, tajine doux, wok de nouilles',
       },
       'snack': {
         label: 'goûter',
-        instructions: 'Encas léger et gourmand pour l\'après-midi. Privilégier les fruits, laitages, gâteaux maison simples.',
+        instructions: 'Encas léger et gourmand pour l\'après-midi. Apporter de l\'énergie sans être trop sucré.',
+        examples: 'Exemples variés: brochettes de fruits, muffins aux pommes, compote maison, crackers au fromage, smoothie, energy balls, pain perdu, banana bread',
       },
       'dinner': {
         label: 'dîner',
-        instructions: 'Repas du soir équilibré mais pas trop lourd. Favoriser les légumes et protéines légères.',
+        instructions: 'Repas du soir équilibré mais léger pour bien dormir. Favoriser les légumes et protéines légères.',
+        examples: 'Exemples variés: soupe veloutée, omelette aux légumes, poisson en papillote, gratin léger, salade composée, pasta légère, poulet grillé aux légumes',
       },
     };
 
-    const mealConfig = mealConfigs[mealType] || { label: 'repas', instructions: '' };
+    const mealConfig = mealConfigs[mealType] || { label: 'repas', instructions: '', examples: '' };
     let specificInstructions = mealConfig.instructions;
+    let mealExamples = mealConfig.examples;
 
     // Lunchbox specific constraints
     if (context?.isLunchbox) {
@@ -85,41 +133,64 @@ serve(async (req) => {
         specificInstructions = `
 CONTRAINTES STRICTES - PIQUE-NIQUE SORTIE SCOLAIRE:
 - Repas 100% froid, aucune cuisson nécessaire sur place
-- Facilement transportable dans un sac
-- Consommable sans couverts si possible
-- Types de recettes autorisés: sandwich, wrap, salade froide, quiche froide, cake salé, fruits, compote, biscuits
-- INTERDIT: soupe, plat chaud, repas nécessitant réchauffage
-- Portions adaptées à un enfant qui va se dépenser`;
+- Facilement transportable dans un sac à dos
+- Consommable sans couverts de préférence
+- Portions adaptées à un enfant qui va marcher et se dépenser`;
+        mealExamples = 'Exemples: sandwich au poulet, wrap au thon, salade de pâtes froide, mini quiche froide, cake salé, crudités avec houmous, fruits frais, compote à boire, biscuits maison';
       } else {
         specificInstructions = `
 CONTRAINTES STRICTES - LUNCHBOX RÉGIME SPÉCIAL:
-- Repas froid ou tiède, transportable
-- Doit respecter STRICTEMENT les allergies et restrictions
-- Consommable facilement à l'école
-- Types de recettes: salade composée, sandwich sans allergène, wrap, légumes crus, fruit
-- INTERDIT: plats chauds complexes, recettes avec allergènes
-- Quantité adaptée à un enfant`;
+- Repas froid ou tiède, parfaitement transportable
+- RESPECT ABSOLU des allergies et restrictions
+- Consommable facilement à l'école sans réchauffage
+- Nutritif et rassasiant`;
+        mealExamples = 'Exemples: salade composée protéinée, wrap sans allergène, bento équilibré, sandwich maison adapté, taboulé de quinoa, salade de lentilles';
       }
     }
 
-    const prompt = `Génère une recette de ${mealConfig.label} pour un enfant de ${childAge} ans.
+    // Build exclusion list for prompt
+    const exclusionText = recipesToExclude.length > 0 
+      ? `\n\n⚠️ RECETTES À NE PAS REPRODUIRE (déjà préparées récemment):\n${recipesToExclude.map(r => `- ${r}`).join('\n')}\nTu DOIS proposer une recette DIFFÉRENTE de celles listées ci-dessus.`
+      : '';
 
+    const prompt = `Crée une recette ORIGINALE et UNIQUE de ${mealConfig.label} pour ${child.name}, ${childAge} ans.
+
+🎯 OBJECTIF: Préparer un repas que ${child.name} va ADORER tout en respectant ses contraintes.
+
+📋 INSTRUCTIONS SPÉCIFIQUES:
 ${specificInstructions}
 
-Contraintes obligatoires:
-- Temps de préparation max: ${availableTime} minutes
-${allergies ? `- ALLERGIES À ÉVITER ABSOLUMENT: ${allergies}` : '- Pas d\'allergies connues'}
-${familyAllergens ? `- ALLERGÈNES FAMILLE À ÉVITER: ${familyAllergens}` : ''}
-${restrictions ? `- RESTRICTIONS ALIMENTAIRES: ${restrictions}` : ''}
-${preferences ? `- Préférences de l'enfant: ${preferences}` : ''}
-${equipment ? `- Matériel disponible: ${equipment}` : ''}
-${parentStyle ? `- Style de cuisine préféré: ${parentStyle}` : ''}
+💡 INSPIRATIONS (ne pas reproduire exactement, s'en inspirer pour innover):
+${mealExamples}
 
-La recette doit être:
-- Équilibrée et nutritive
-- Adaptée à l'âge de l'enfant
-- Facile à préparer
-- Appétissante pour un enfant`;
+⏱️ CONTRAINTES DE PRÉPARATION:
+- Temps max: ${availableTime} minutes
+- Difficulté souhaitée: ${difficulty}
+${equipment ? `- Matériel disponible: ${equipment}` : ''}
+
+🚫 ALLERGIES & RESTRICTIONS (ABSOLUMENT À RESPECTER):
+${allergies ? `- ALLERGIES CRITIQUES: ${allergies}` : '- Aucune allergie connue'}
+${familyAllergens ? `- Allergènes famille: ${familyAllergens}` : ''}
+${restrictions ? `- Restrictions: ${restrictions}` : ''}
+${dislikes ? `- Aliments que ${child.name} n'aime PAS: ${dislikes}` : ''}
+
+❤️ PRÉFÉRENCES DE ${child.name.toUpperCase()}:
+${preferences ? `- Aliments préférés: ${preferences}` : '- Pas de préférences spécifiques'}
+${mealObjectives ? `- Objectifs nutritionnels: ${mealObjectives}` : ''}
+${parentStyle ? `- Style de cuisine familial: ${parentStyle}` : ''}
+
+🌿 SAISONNALITÉ:
+- Nous sommes en ${currentSeason}, privilégie les ingrédients de saison
+${exclusionText}
+
+✨ CRITÈRES DE QUALITÉ:
+- Nom FUN et ATTRAYANT pour un enfant (évite les noms génériques comme "Salade de...")
+- Présentation visuelle adaptée aux enfants (couleurs, formes)
+- Équilibre nutritionnel
+- Instructions simples et claires`;
+
+    console.log("Calling AI with enhanced prompt for unique recipe");
+    console.log("Excluding recipes:", recipesToExclude.slice(0, 5).join(", "), recipesToExclude.length > 5 ? `... and ${recipesToExclude.length - 5} more` : "");
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -139,10 +210,17 @@ La recette doit être:
         messages: [
           {
             role: 'system',
-            content: `Tu es un chef cuisinier spécialisé dans les repas pour enfants. 
-Tu dois créer des recettes adaptées, équilibrées et appétissantes.
-Tu dois ABSOLUMENT respecter les allergies et restrictions mentionnées.
-Tu retournes UNIQUEMENT le résultat via l'outil create_recipe.`
+            content: `Tu es un chef cuisinier créatif spécialisé dans les repas pour enfants.
+
+RÈGLES ABSOLUES:
+1. Chaque recette doit être UNIQUE - ne jamais proposer deux fois le même plat
+2. Les noms de recettes doivent être FUN et ORIGINAUX pour plaire aux enfants
+3. RESPECTER ABSOLUMENT les allergies et restrictions mentionnées
+4. Utiliser les ingrédients de SAISON quand mentionnés
+5. Adapter la difficulté et le temps de préparation aux contraintes données
+6. Privilégier les aliments que l'enfant AIME et éviter ceux qu'il n'aime pas
+
+Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif dans les noms!`
           },
           {
             role: 'user',
