@@ -318,9 +318,8 @@ export const TodayMeals = ({
       {/* Indicateur régime spécial */}
       {hasSpecialDiet && (
         <div className="flex items-center gap-2 px-3 py-2 bg-amber-100/80 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
-          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           <span className="text-xs text-amber-700 dark:text-amber-300">
-            🔔 Régime alimentaire spécial détecté : les repas proposés sont adaptés.
+            🔔 Régime alimentaire spécial détecté : Kidboost adapte les repas automatiquement.
           </span>
         </div>
       )}
