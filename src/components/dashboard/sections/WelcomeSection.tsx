@@ -39,6 +39,9 @@ interface Child {
   preferences: string[] | null;
   dislikes: string[] | null;
   available_time: number | null;
+  dejeuner_habituel?: string;
+  regime_special?: boolean;
+  sortie_scolaire_dates?: string[] | null;
 }
 
 interface MealData {
@@ -101,8 +104,8 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   const { generateQuickPlan, loading: quickPlanLoading } = useQuickPlan(userId);
   const { fetchDashboardData, generateMeal, generating } = useDashboardData(userId);
 
-  // Check if child has special diet (allergies)
-  const hasSpecialDiet = selectedChild?.allergies && selectedChild.allergies.filter(a => a && a.trim() !== '').length > 0;
+  // Check if child has special diet from profile settings
+  const hasSpecialDiet = selectedChild?.regime_special || false;
 
   // Fetch user and children on mount
   useEffect(() => {
@@ -114,7 +117,7 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
 
       const { data: childrenData } = await supabase
         .from('children_profiles')
-        .select('id, name, birth_date, allergies, meal_objectives, preferences, dislikes, available_time')
+        .select('id, name, birth_date, allergies, meal_objectives, preferences, dislikes, available_time, dejeuner_habituel, regime_special, sortie_scolaire_dates')
         .eq('profile_id', userId);
 
       if (childrenData && childrenData.length > 0) {

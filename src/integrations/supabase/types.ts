@@ -54,45 +54,72 @@ export type Database = {
       }
       children_profiles: {
         Row: {
+          aliments_interdits: string[] | null
+          aliments_preferes: string[] | null
           allergies: string[] | null
           available_time: number | null
           birth_date: string
           created_at: string
+          dejeuner_habituel: string | null
+          difficulte_souhaitee: string | null
           dislikes: string[] | null
           id: string
+          materiel_disponible: string[] | null
           meal_objectives: string[] | null
           name: string
           onboarding_completed: boolean | null
           preferences: string[] | null
+          preferences_gout: string[] | null
           profile_id: string
+          regime_special: boolean | null
+          restrictions_alimentaires: string[] | null
+          sortie_scolaire_dates: string[] | null
           updated_at: string
         }
         Insert: {
+          aliments_interdits?: string[] | null
+          aliments_preferes?: string[] | null
           allergies?: string[] | null
           available_time?: number | null
           birth_date: string
           created_at?: string
+          dejeuner_habituel?: string | null
+          difficulte_souhaitee?: string | null
           dislikes?: string[] | null
           id?: string
+          materiel_disponible?: string[] | null
           meal_objectives?: string[] | null
           name: string
           onboarding_completed?: boolean | null
           preferences?: string[] | null
+          preferences_gout?: string[] | null
           profile_id: string
+          regime_special?: boolean | null
+          restrictions_alimentaires?: string[] | null
+          sortie_scolaire_dates?: string[] | null
           updated_at?: string
         }
         Update: {
+          aliments_interdits?: string[] | null
+          aliments_preferes?: string[] | null
           allergies?: string[] | null
           available_time?: number | null
           birth_date?: string
           created_at?: string
+          dejeuner_habituel?: string | null
+          difficulte_souhaitee?: string | null
           dislikes?: string[] | null
           id?: string
+          materiel_disponible?: string[] | null
           meal_objectives?: string[] | null
           name?: string
           onboarding_completed?: boolean | null
           preferences?: string[] | null
+          preferences_gout?: string[] | null
           profile_id?: string
+          regime_special?: boolean | null
+          restrictions_alimentaires?: string[] | null
+          sortie_scolaire_dates?: string[] | null
           updated_at?: string
         }
         Relationships: [
@@ -273,18 +300,21 @@ export type Database = {
           created_at: string
           id: string
           onboarding_completed: boolean | null
+          preferences_parent: Json | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           id: string
           onboarding_completed?: boolean | null
+          preferences_parent?: Json | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
           onboarding_completed?: boolean | null
+          preferences_parent?: Json | null
           updated_at?: string
         }
         Relationships: []
