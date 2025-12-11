@@ -8,7 +8,8 @@ import { format, startOfWeek, endOfWeek, addWeeks, addDays, isSameDay, parseISO 
 import { fr } from "date-fns/locale";
 import { MealSlot, LunchType, determineLunchType, ChildMealConfig, MEAL_ORDER } from "@/lib/meals";
 import { WeeklyPlanningGrid } from "@/components/planning/WeeklyPlanningGrid";
-import { ChildSelector } from "@/components/planning/ChildSelector";
+import { GlobalChildSelector } from "@/components/common/GlobalChildSelector";
+import { useChild } from "@/contexts/ChildContext";
 import { AddRecipeDialog } from "@/components/planning/AddRecipeDialog";
 import { PlanningSummary } from "@/components/planning/PlanningSummary";
 import { toast } from "sonner";
@@ -24,15 +25,6 @@ interface PlannedMeal {
   } | null;
 }
 
-interface Child {
-  id: string;
-  name: string;
-  birth_date: string;
-  regime_special: boolean;
-  dejeuner_habituel: string;
-  sortie_scolaire_dates: string[];
-}
-
 interface DayLunchConfig {
   date: string;
   lunchType: LunchType;
@@ -46,10 +38,12 @@ export default function Planning() {
   const session = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
   
+  // Use global child context
+  const { selectedChild, selectChildById } = useChild();
+  
   const [currentWeekStart, setCurrentWeekStart] = useState(() => 
     startOfWeek(new Date(), { weekStartsOn: 1 })
   );
-  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [plannedMeals, setPlannedMeals] = useState<PlannedMeal[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -57,6 +51,14 @@ export default function Planning() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<MealSlot | null>(null);
+
+  // Sync URL params with selected child
+  useEffect(() => {
+    const childIdFromParams = searchParams.get("childId");
+    if (childIdFromParams && selectedChild?.id !== childIdFromParams) {
+      selectChildById(childIdFromParams);
+    }
+  }, [searchParams, selectChildById, selectedChild?.id]);
 
   // Generate week days
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
@@ -179,12 +181,10 @@ export default function Planning() {
   }, [session?.user?.id, selectedChild?.id, currentWeekStart]);
 
   // Handle child selection
-  const handleSelectChild = useCallback((child: Child | null) => {
-    setSelectedChild(child);
-    if (child) {
-      setSearchParams({ childId: child.id });
-    }
-  }, [setSearchParams]);
+  const handleSelectChild = useCallback((childId: string) => {
+    selectChildById(childId);
+    setSearchParams({ childId });
+  }, [setSearchParams, selectChildById]);
 
   // Navigation
   const goToPreviousWeek = () => setCurrentWeekStart((prev) => addWeeks(prev, -1));
@@ -355,13 +355,9 @@ export default function Planning() {
         </div>
 
         {/* Child selector */}
-        {session?.user?.id && (
-          <ChildSelector
-            userId={session.user.id}
-            selectedChildId={selectedChild?.id || childIdFromParams}
-            onSelectChild={handleSelectChild}
-          />
-        )}
+        <GlobalChildSelector 
+          onChildChange={handleSelectChild}
+        />
 
         {/* Week navigation */}
         <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">

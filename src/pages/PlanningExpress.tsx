@@ -7,25 +7,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { 
   ArrowLeft, Sparkles, Calendar, Check, Loader2, Coffee, Utensils, 
-  Cookie, Moon, AlertTriangle, ChefHat, Backpack, UtensilsCrossed 
+  Cookie, Moon, AlertTriangle, ChefHat, Backpack, UtensilsCrossed,
+  Users
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, startOfWeek, addDays, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { MealSlot, MEAL_ORDER, determineLunchType, LUNCH_CONFIGS } from "@/lib/meals";
-
-interface ChildProfile {
-  id: string;
-  name: string;
-  dejeuner_habituel: string | null;
-  regime_special: boolean | null;
-  sortie_scolaire_dates: string[] | null;
-  allergies: string[] | null;
-  restrictions_alimentaires: string[] | null;
-  preferences: string[] | null;
-  available_time: number | null;
-}
+import { useChild, ChildProfile } from "@/contexts/ChildContext";
+import { GlobalChildSelector } from "@/components/common/GlobalChildSelector";
 
 interface ExistingMeal {
   date: string;
@@ -72,14 +63,24 @@ export default function PlanningExpress() {
   const navigate = useNavigate();
   const session = useSession();
   const [searchParams] = useSearchParams();
-  const childId = searchParams.get("childId");
+  const childIdParam = searchParams.get("childId");
+  
+  // Use global child context
+  const { selectedChild, children, selectChildById } = useChild();
   
   const [generating, setGenerating] = useState(false);
-  const [child, setChild] = useState<ChildProfile | null>(null);
   const [existingMeals, setExistingMeals] = useState<ExistingMeal[]>([]);
   const [weekPlan, setWeekPlan] = useState<DayPlan[]>([]);
   const [generateBreakfast, setGenerateBreakfast] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, currentMeal: "" });
+  const [generateForAll, setGenerateForAll] = useState(false);
+
+  // Sync with URL param
+  useEffect(() => {
+    if (childIdParam && selectedChild?.id !== childIdParam) {
+      selectChildById(childIdParam);
+    }
+  }, [childIdParam, selectChildById, selectedChild?.id]);
 
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -91,28 +92,19 @@ export default function PlanningExpress() {
     };
   });
 
-  // Fetch child profile and existing meals
+  // Use selectedChild from context
+  const child = selectedChild;
+
+  // Fetch existing meals for current child
   useEffect(() => {
     const fetchData = async () => {
-      if (!session?.user?.id || !childId) return;
+      if (!session?.user?.id || !child?.id) return;
 
-      // Fetch child profile
-      const { data: childData } = await supabase
-        .from("children_profiles")
-        .select("*")
-        .eq("id", childId)
-        .single();
-
-      if (childData) {
-        setChild(childData);
-      }
-
-      // Fetch existing meal plans for the week
       const { data: mealsData } = await supabase
         .from("meal_plans")
         .select("date, meal_time, recipe_id, recipes(name)")
         .eq("profile_id", session.user.id)
-        .eq("child_id", childId)
+        .eq("child_id", child.id)
         .gte("date", weekDays[0].date)
         .lte("date", weekDays[6].date);
 
@@ -122,7 +114,7 @@ export default function PlanningExpress() {
     };
 
     fetchData();
-  }, [session?.user?.id, childId]);
+  }, [session?.user?.id, child?.id]);
 
   // Check if a meal already exists for a specific day and slot
   const mealExists = (date: string, mealTime: string): ExistingMeal | undefined => {
@@ -192,7 +184,7 @@ export default function PlanningExpress() {
   };
 
   const handleGenerateWeek = async () => {
-    if (!session?.user?.id || !childId || !child) {
+    if (!session?.user?.id || !child?.id || !child) {
       toast.error("Veuillez sélectionner un enfant");
       return;
     }
@@ -252,7 +244,7 @@ export default function PlanningExpress() {
 
           const { data, error } = await supabase.functions.invoke("generate-daily-meal", {
             body: {
-              childId,
+              childId: child.id,
               profileId: session.user.id,
               mealType: actualMealTime,
               date: day.date,
