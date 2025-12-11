@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
+import { fr } from "date-fns/locale";
 import {
   ArrowLeft,
   User,
@@ -22,6 +27,13 @@ import {
   Home,
   Calendar,
   Save,
+  Settings,
+  UtensilsCrossed,
+  ChefHat,
+  X,
+  Baby,
+  Heart,
+  Apple,
 } from "lucide-react";
 import {
   Dialog,
@@ -31,14 +43,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
-interface Child {
+interface ChildProfile {
   id: string;
   name: string;
   birth_date: string;
@@ -47,117 +58,151 @@ interface Child {
   dislikes: string[] | null;
   meal_objectives: string[] | null;
   available_time: number | null;
+  dejeuner_habituel: string;
+  regime_special: boolean;
+  sortie_scolaire_dates: string[] | null;
+  restrictions_alimentaires: string[] | null;
+  aliments_interdits: string[] | null;
+  aliments_preferes: string[] | null;
+  preferences_gout: string[] | null;
+  difficulte_souhaitee: string;
+  materiel_disponible: string[] | null;
 }
+
+interface ParentPreferences {
+  style_cuisine: string[];
+  difficulte: string;
+  allergenes_famille: string[];
+  materiel_maison: string[];
+}
+
+const ALLERGIES_OPTIONS = [
+  "Gluten",
+  "Lactose",
+  "Œufs",
+  "Arachides",
+  "Fruits à coque",
+  "Soja",
+  "Poisson",
+  "Crustacés",
+  "Sésame",
+];
+
+const RESTRICTIONS_OPTIONS = [
+  { id: "sans_lactose", label: "Sans lactose" },
+  { id: "sans_gluten", label: "Sans gluten" },
+  { id: "halal", label: "Halal" },
+  { id: "vegetarien", label: "Végétarien" },
+  { id: "vegan", label: "Vegan" },
+];
+
+const GOUT_OPTIONS = [
+  { id: "sucre", label: "Sucré" },
+  { id: "sale", label: "Salé" },
+  { id: "doux", label: "Doux" },
+  { id: "simple", label: "Simple" },
+  { id: "gourmand", label: "Gourmand" },
+];
+
+const MATERIEL_OPTIONS = [
+  { id: "four", label: "Four" },
+  { id: "micro_ondes", label: "Micro-ondes" },
+  { id: "airfryer", label: "Airfryer" },
+  { id: "mixeur", label: "Mixeur" },
+  { id: "robot_cuisine", label: "Robot cuisine" },
+];
+
+const STYLE_CUISINE_OPTIONS = [
+  { id: "rapide", label: "Rapide" },
+  { id: "equilibree", label: "Équilibrée" },
+  { id: "traditionnelle", label: "Traditionnelle" },
+  { id: "mini_budget", label: "Mini budget" },
+  { id: "sans_cuisson", label: "Sans cuisson" },
+];
 
 const ProfileSettings = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const session = useSession();
-  const [children, setChildren] = useState<Child[]>([]);
+  const [children, setChildren] = useState<ChildProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingChild, setEditingChild] = useState<Child | null>(null);
+  const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newSortieDate, setNewSortieDate] = useState("");
+  const [parentPreferences, setParentPreferences] = useState<ParentPreferences>({
+    style_cuisine: [],
+    difficulte: "facile",
+    allergenes_famille: [],
+    materiel_maison: [],
+  });
   const [newChild, setNewChild] = useState({
     name: "",
     birth_date: "",
-    allergies: "",
-    preferences: "",
-    dislikes: "",
   });
 
   useEffect(() => {
     if (session?.user?.id) {
-      fetchChildren();
+      fetchData();
     }
   }, [session?.user?.id]);
 
-  const fetchChildren = async () => {
+  // Handle childId from URL
+  useEffect(() => {
+    const childId = searchParams.get("childId");
+    if (childId && children.length > 0) {
+      const child = children.find((c) => c.id === childId);
+      if (child) setSelectedChild(child);
+    }
+  }, [searchParams, children]);
+
+  const fetchData = async () => {
     if (!session?.user?.id) return;
 
     try {
-      const { data, error } = await supabase
-        .from("children_profiles")
-        .select("*")
-        .eq("profile_id", session.user.id)
-        .order("created_at", { ascending: true });
+      const [childrenRes, profileRes] = await Promise.all([
+        supabase
+          .from("children_profiles")
+          .select("*")
+          .eq("profile_id", session.user.id)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("profiles")
+          .select("preferences_parent")
+          .eq("id", session.user.id)
+          .single(),
+      ]);
 
-      if (error) throw error;
-      setChildren(data || []);
+      if (childrenRes.error) throw childrenRes.error;
+      
+      const childrenData = (childrenRes.data || []).map((child) => ({
+        ...child,
+        dejeuner_habituel: child.dejeuner_habituel || "cantine",
+        regime_special: child.regime_special || false,
+        sortie_scolaire_dates: child.sortie_scolaire_dates || [],
+        restrictions_alimentaires: child.restrictions_alimentaires || [],
+        aliments_interdits: child.aliments_interdits || [],
+        aliments_preferes: child.aliments_preferes || [],
+        preferences_gout: child.preferences_gout || [],
+        difficulte_souhaitee: child.difficulte_souhaitee || "facile",
+        materiel_disponible: child.materiel_disponible || [],
+      }));
+      
+      setChildren(childrenData as ChildProfile[]);
+
+      if (profileRes.data?.preferences_parent) {
+        const prefs = profileRes.data.preferences_parent as unknown as ParentPreferences;
+        setParentPreferences({
+          style_cuisine: prefs.style_cuisine || [],
+          difficulte: prefs.difficulte || "facile",
+          allergenes_famille: prefs.allergenes_famille || [],
+          materiel_maison: prefs.materiel_maison || [],
+        });
+      }
     } catch (error) {
-      console.error("Error fetching children:", error);
-      toast.error("Erreur lors du chargement des profils");
+      console.error("Error fetching data:", error);
+      toast.error("Erreur lors du chargement");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleAddChild = async () => {
-    if (!session?.user?.id || !newChild.name || !newChild.birth_date) {
-      toast.error("Veuillez remplir les champs obligatoires");
-      return;
-    }
-
-    try {
-      const { error } = await supabase.from("children_profiles").insert({
-        profile_id: session.user.id,
-        name: newChild.name,
-        birth_date: newChild.birth_date,
-        allergies: newChild.allergies ? newChild.allergies.split(",").map((s) => s.trim()) : [],
-        preferences: newChild.preferences ? newChild.preferences.split(",").map((s) => s.trim()) : [],
-        dislikes: newChild.dislikes ? newChild.dislikes.split(",").map((s) => s.trim()) : [],
-      });
-
-      if (error) throw error;
-
-      toast.success("Enfant ajouté avec succès");
-      setShowAddDialog(false);
-      setNewChild({ name: "", birth_date: "", allergies: "", preferences: "", dislikes: "" });
-      fetchChildren();
-    } catch (error) {
-      console.error("Error adding child:", error);
-      toast.error("Erreur lors de l'ajout de l'enfant");
-    }
-  };
-
-  const handleUpdateChild = async () => {
-    if (!editingChild) return;
-
-    try {
-      const { error } = await supabase
-        .from("children_profiles")
-        .update({
-          name: editingChild.name,
-          birth_date: editingChild.birth_date,
-          allergies: editingChild.allergies,
-          preferences: editingChild.preferences,
-          dislikes: editingChild.dislikes,
-          available_time: editingChild.available_time,
-        })
-        .eq("id", editingChild.id);
-
-      if (error) throw error;
-
-      toast.success("Profil mis à jour");
-      setEditingChild(null);
-      fetchChildren();
-    } catch (error) {
-      console.error("Error updating child:", error);
-      toast.error("Erreur lors de la mise à jour");
-    }
-  };
-
-  const handleDeleteChild = async (childId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce profil ?")) return;
-
-    try {
-      const { error } = await supabase.from("children_profiles").delete().eq("id", childId);
-
-      if (error) throw error;
-
-      toast.success("Profil supprimé");
-      fetchChildren();
-    } catch (error) {
-      console.error("Error deleting child:", error);
-      toast.error("Erreur lors de la suppression");
     }
   };
 
@@ -172,6 +217,143 @@ const ProfileSettings = () => {
     return age;
   };
 
+  const handleAddChild = async () => {
+    if (!session?.user?.id || !newChild.name || !newChild.birth_date) {
+      toast.error("Veuillez remplir les champs obligatoires");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("children_profiles")
+        .insert({
+          profile_id: session.user.id,
+          name: newChild.name,
+          birth_date: newChild.birth_date,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success("Enfant ajouté avec succès");
+      setShowAddDialog(false);
+      setNewChild({ name: "", birth_date: "" });
+      fetchData();
+      
+      // Auto-select the new child
+      if (data) {
+        setSelectedChild({
+          ...data,
+          dejeuner_habituel: data.dejeuner_habituel || "cantine",
+          regime_special: data.regime_special || false,
+          sortie_scolaire_dates: data.sortie_scolaire_dates || [],
+          restrictions_alimentaires: data.restrictions_alimentaires || [],
+          aliments_interdits: data.aliments_interdits || [],
+          aliments_preferes: data.aliments_preferes || [],
+          preferences_gout: data.preferences_gout || [],
+          difficulte_souhaitee: data.difficulte_souhaitee || "facile",
+          materiel_disponible: data.materiel_disponible || [],
+        } as ChildProfile);
+      }
+    } catch (error) {
+      console.error("Error adding child:", error);
+      toast.error("Erreur lors de l'ajout");
+    }
+  };
+
+  const handleSaveChild = async () => {
+    if (!selectedChild) return;
+
+    try {
+      const { error } = await supabase
+        .from("children_profiles")
+        .update({
+          name: selectedChild.name,
+          birth_date: selectedChild.birth_date,
+          allergies: selectedChild.allergies,
+          preferences: selectedChild.preferences,
+          dislikes: selectedChild.dislikes,
+          available_time: selectedChild.available_time,
+          dejeuner_habituel: selectedChild.dejeuner_habituel,
+          regime_special: selectedChild.regime_special,
+          sortie_scolaire_dates: selectedChild.sortie_scolaire_dates,
+          restrictions_alimentaires: selectedChild.restrictions_alimentaires,
+          aliments_interdits: selectedChild.aliments_interdits,
+          aliments_preferes: selectedChild.aliments_preferes,
+          preferences_gout: selectedChild.preferences_gout,
+          difficulte_souhaitee: selectedChild.difficulte_souhaitee,
+          materiel_disponible: selectedChild.materiel_disponible,
+        })
+        .eq("id", selectedChild.id);
+
+      if (error) throw error;
+
+      toast.success("Modifications enregistrées. Le Dashboard de votre enfant a été mis à jour.");
+      fetchData();
+    } catch (error) {
+      console.error("Error updating child:", error);
+      toast.error("Erreur lors de la sauvegarde");
+    }
+  };
+
+  const handleDeleteChild = async (childId: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce profil ?")) return;
+
+    try {
+      const { error } = await supabase.from("children_profiles").delete().eq("id", childId);
+      if (error) throw error;
+
+      toast.success("Profil supprimé");
+      setSelectedChild(null);
+      fetchData();
+    } catch (error) {
+      console.error("Error deleting child:", error);
+      toast.error("Erreur lors de la suppression");
+    }
+  };
+
+  const handleSaveParentPreferences = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ preferences_parent: JSON.parse(JSON.stringify(parentPreferences)) })
+        .eq("id", session.user.id);
+
+      if (error) throw error;
+      toast.success("Préférences parent enregistrées");
+    } catch (error) {
+      console.error("Error saving parent preferences:", error);
+      toast.error("Erreur lors de la sauvegarde");
+    }
+  };
+
+  const addSortieDate = () => {
+    if (!selectedChild || !newSortieDate) return;
+    const dates = [...(selectedChild.sortie_scolaire_dates || []), newSortieDate];
+    setSelectedChild({ ...selectedChild, sortie_scolaire_dates: dates });
+    setNewSortieDate("");
+  };
+
+  const removeSortieDate = (dateToRemove: string) => {
+    if (!selectedChild) return;
+    const dates = (selectedChild.sortie_scolaire_dates || []).filter((d) => d !== dateToRemove);
+    setSelectedChild({ ...selectedChild, sortie_scolaire_dates: dates });
+  };
+
+  const toggleArrayValue = (
+    field: keyof ChildProfile,
+    value: string,
+    checked: boolean
+  ) => {
+    if (!selectedChild) return;
+    const current = (selectedChild[field] as string[]) || [];
+    const updated = checked ? [...current, value] : current.filter((v) => v !== value);
+    setSelectedChild({ ...selectedChild, [field]: updated });
+  };
+
   if (!session) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -182,19 +364,21 @@ const ProfileSettings = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 max-w-2xl">
+      <div className="container mx-auto px-4 py-6 max-w-3xl">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold">Paramètres du profil</h1>
-            <p className="text-sm text-muted-foreground">Gérez votre famille et vos préférences</p>
+            <h1 className="text-xl font-bold">Paramètres Kidboost</h1>
+            <p className="text-sm text-muted-foreground">
+              Gérez les profils et préférences pour des repas adaptés
+            </p>
           </div>
         </div>
 
-        {/* Children Section */}
+        {/* Section 1: Children List */}
         <Card className="p-4 mb-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -203,7 +387,7 @@ const ProfileSettings = () => {
             </div>
             <Button size="sm" onClick={() => setShowAddDialog(true)} className="gap-1">
               <Plus className="w-4 h-4" />
-              Ajouter
+              Ajouter un enfant
             </Button>
           </div>
 
@@ -211,133 +395,586 @@ const ProfileSettings = () => {
             <p className="text-sm text-muted-foreground">Chargement...</p>
           ) : children.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <Users className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <Baby className="w-12 h-12 mx-auto mb-2 opacity-30" />
               <p>Aucun enfant enregistré</p>
               <Button variant="link" onClick={() => setShowAddDialog(true)}>
                 Ajouter un premier enfant
               </Button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {children.map((child) => (
-                <div
+                <Card
                   key={child.id}
-                  className="flex items-start justify-between p-3 bg-muted/30 rounded-lg"
+                  className={`p-3 cursor-pointer transition-all hover:shadow-md ${
+                    selectedChild?.id === child.id
+                      ? "ring-2 ring-primary bg-primary/5"
+                      : "hover:bg-muted/30"
+                  }`}
+                  onClick={() => setSelectedChild(child)}
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{child.name}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {calculateAge(child.birth_date)} ans
-                      </Badge>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                      <User className="w-5 h-5 text-primary" />
                     </div>
-
-                    {child.allergies && child.allergies.length > 0 && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <AlertTriangle className="w-3 h-3 text-destructive" />
-                        <span className="text-xs text-muted-foreground">
-                          {child.allergies.filter((a) => a).join(", ")}
-                        </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{child.name}</span>
+                        <Badge variant="secondary" className="text-xs shrink-0">
+                          {calculateAge(child.birth_date)} ans
+                        </Badge>
                       </div>
-                    )}
-
-                    {child.preferences && child.preferences.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {child.preferences.filter((p) => p).slice(0, 3).map((pref, idx) => (
-                          <Badge key={idx} variant="outline" className="text-[10px]">
-                            {pref}
+                      {child.allergies && child.allergies.length > 0 && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <AlertTriangle className="w-3 h-3 text-amber-500" />
+                          <span className="text-xs text-muted-foreground truncate">
+                            {child.allergies.filter((a) => a).slice(0, 2).join(", ")}
+                            {child.allergies.length > 2 && "..."}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex gap-1 mt-1">
+                        {child.regime_special && (
+                          <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                            Régime spécial
                           </Badge>
-                        ))}
+                        )}
+                        <Badge variant="outline" className="text-[10px]">
+                          {child.dejeuner_habituel === "cantine" ? "Cantine" : "Maison"}
+                        </Badge>
                       </div>
-                    )}
+                    </div>
                   </div>
-
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setEditingChild(child)}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteChild(child.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
+                </Card>
               ))}
             </div>
           )}
         </Card>
 
-        {/* Info Card */}
-        <Card className="p-4 bg-muted/30">
-          <h3 className="font-medium text-sm mb-2">À propos des préférences</h3>
-          <ul className="text-xs text-muted-foreground space-y-1">
-            <li>• Les allergies sont prises en compte pour exclure certains ingrédients</li>
-            <li>• Les préférences orientent les suggestions de recettes</li>
-            <li>• Les aversions (ce qu'ils n'aiment pas) sont évitées dans les propositions</li>
-            <li>• Le temps disponible influence la complexité des recettes proposées</li>
-          </ul>
+        {/* Section 2: Child Detail */}
+        {selectedChild && (
+          <Card className="p-4 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-primary" />
+                <h2 className="font-semibold">Fiche de {selectedChild.name}</h2>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => handleDeleteChild(selectedChild.id)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+                <Button size="sm" onClick={handleSaveChild} className="gap-1">
+                  <Save className="w-4 h-4" />
+                  Enregistrer
+                </Button>
+              </div>
+            </div>
+
+            <Accordion type="multiple" defaultValue={["general", "dejeuner"]} className="space-y-2">
+              {/* A. Informations générales */}
+              <AccordionItem value="general" className="border rounded-lg px-3">
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex items-center gap-2">
+                    <Baby className="w-4 h-4 text-blue-500" />
+                    <span>Informations générales</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4 pt-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Prénom</Label>
+                      <Input
+                        value={selectedChild.name}
+                        onChange={(e) =>
+                          setSelectedChild({ ...selectedChild, name: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>Date de naissance</Label>
+                      <Input
+                        type="date"
+                        value={selectedChild.birth_date}
+                        onChange={(e) =>
+                          setSelectedChild({ ...selectedChild, birth_date: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              {/* B. Paramètres déjeuner */}
+              <AccordionItem value="dejeuner" className="border rounded-lg px-3">
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex items-center gap-2">
+                    <UtensilsCrossed className="w-4 h-4 text-orange-500" />
+                    <span>Paramètres déjeuner</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-6 pt-2">
+                  {/* 1. Où mange-t-il ? */}
+                  <div>
+                    <Label className="text-sm font-medium mb-3 block">
+                      Où votre enfant mange-t-il habituellement le midi ?
+                    </Label>
+                    <RadioGroup
+                      value={selectedChild.dejeuner_habituel}
+                      onValueChange={(v) =>
+                        setSelectedChild({ ...selectedChild, dejeuner_habituel: v })
+                      }
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="cantine" id="cantine" />
+                        <Label htmlFor="cantine" className="flex items-center gap-2 cursor-pointer">
+                          <School className="w-4 h-4" />
+                          À la cantine
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="maison" id="maison" />
+                        <Label htmlFor="maison" className="flex items-center gap-2 cursor-pointer">
+                          <Home className="w-4 h-4" />
+                          À la maison
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  {/* 2. Régime spécial */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Régime alimentaire spécial</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Activez si votre enfant a des restrictions alimentaires particulières
+                      </p>
+                    </div>
+                    <Switch
+                      checked={selectedChild.regime_special}
+                      onCheckedChange={(checked) =>
+                        setSelectedChild({ ...selectedChild, regime_special: checked })
+                      }
+                    />
+                  </div>
+
+                  <Separator />
+
+                  {/* 3. Sorties scolaires */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">
+                      <Calendar className="w-4 h-4 inline mr-1" />
+                      Sorties scolaires
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Ajoutez les dates où un pique-nique est obligatoire
+                    </p>
+                    <div className="flex gap-2 mb-2">
+                      <Input
+                        type="date"
+                        value={newSortieDate}
+                        onChange={(e) => setNewSortieDate(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button onClick={addSortieDate} size="sm" disabled={!newSortieDate}>
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {selectedChild.sortie_scolaire_dates && selectedChild.sortie_scolaire_dates.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedChild.sortie_scolaire_dates.map((date) => (
+                          <Badge key={date} variant="secondary" className="gap-1">
+                            {format(parseISO(date), "EEEE d MMMM yyyy", { locale: fr })}
+                            <button
+                              onClick={() => removeSortieDate(date)}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              {/* C. Allergies & Restrictions */}
+              {selectedChild.regime_special && (
+                <AccordionItem value="allergies" className="border rounded-lg px-3 border-amber-200 bg-amber-50/30">
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      <span>Allergies & Restrictions</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-2">
+                    {/* Allergies */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Allergies</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {ALLERGIES_OPTIONS.map((allergy) => (
+                          <div key={allergy} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`allergy-${allergy}`}
+                              checked={(selectedChild.allergies || []).includes(allergy)}
+                              onCheckedChange={(checked) =>
+                                toggleArrayValue("allergies", allergy, checked as boolean)
+                              }
+                            />
+                            <Label htmlFor={`allergy-${allergy}`} className="text-sm cursor-pointer">
+                              {allergy}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Restrictions */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Restrictions alimentaires</Label>
+                      <div className="flex flex-wrap gap-3">
+                        {RESTRICTIONS_OPTIONS.map((r) => (
+                          <div key={r.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`restriction-${r.id}`}
+                              checked={(selectedChild.restrictions_alimentaires || []).includes(r.id)}
+                              onCheckedChange={(checked) =>
+                                toggleArrayValue("restrictions_alimentaires", r.id, checked as boolean)
+                              }
+                            />
+                            <Label htmlFor={`restriction-${r.id}`} className="text-sm cursor-pointer">
+                              {r.label}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Aliments interdits/préférés */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium mb-1 block">Aliments interdits</Label>
+                        <Input
+                          placeholder="Séparés par des virgules"
+                          value={(selectedChild.aliments_interdits || []).join(", ")}
+                          onChange={(e) =>
+                            setSelectedChild({
+                              ...selectedChild,
+                              aliments_interdits: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium mb-1 block">Aliments préférés</Label>
+                        <Input
+                          placeholder="Séparés par des virgules"
+                          value={(selectedChild.aliments_preferes || []).join(", ")}
+                          onChange={(e) =>
+                            setSelectedChild({
+                              ...selectedChild,
+                              aliments_preferes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+
+              {/* D. Préférences de l'enfant */}
+              <AccordionItem value="preferences" className="border rounded-lg px-3">
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-pink-500" />
+                    <span>Préférences de l'enfant</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4 pt-2">
+                  {/* Goûts */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Préférences de goût</Label>
+                    <div className="flex flex-wrap gap-3">
+                      {GOUT_OPTIONS.map((g) => (
+                        <div key={g.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`gout-${g.id}`}
+                            checked={(selectedChild.preferences_gout || []).includes(g.id)}
+                            onCheckedChange={(checked) =>
+                              toggleArrayValue("preferences_gout", g.id, checked as boolean)
+                            }
+                          />
+                          <Label htmlFor={`gout-${g.id}`} className="text-sm cursor-pointer">
+                            {g.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Difficulté */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Difficulté souhaitée</Label>
+                    <RadioGroup
+                      value={selectedChild.difficulte_souhaitee}
+                      onValueChange={(v) =>
+                        setSelectedChild({ ...selectedChild, difficulte_souhaitee: v })
+                      }
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="tres_facile" id="tres_facile" />
+                        <Label htmlFor="tres_facile" className="cursor-pointer">Très facile</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="facile" id="facile" />
+                        <Label htmlFor="facile" className="cursor-pointer">Facile</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="moyen" id="moyen" />
+                        <Label htmlFor="moyen" className="cursor-pointer">Moyen</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  {/* Temps de préparation */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">
+                      Durée de préparation max : {selectedChild.available_time || 20} min
+                    </Label>
+                    <Slider
+                      value={[selectedChild.available_time || 20]}
+                      onValueChange={([v]) => setSelectedChild({ ...selectedChild, available_time: v })}
+                      min={5}
+                      max={60}
+                      step={5}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>5 min</span>
+                      <span>60 min</span>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Matériel */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Matériel disponible</Label>
+                    <div className="flex flex-wrap gap-3">
+                      {MATERIEL_OPTIONS.map((m) => (
+                        <div key={m.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`materiel-child-${m.id}`}
+                            checked={(selectedChild.materiel_disponible || []).includes(m.id)}
+                            onCheckedChange={(checked) =>
+                              toggleArrayValue("materiel_disponible", m.id, checked as boolean)
+                            }
+                          />
+                          <Label htmlFor={`materiel-child-${m.id}`} className="text-sm cursor-pointer">
+                            {m.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Ce qu'il n'aime pas */}
+                  <div>
+                    <Label className="text-sm font-medium mb-1 block">Ce qu'il/elle n'aime pas</Label>
+                    <Input
+                      placeholder="Séparés par des virgules (ex: épinards, poisson)"
+                      value={(selectedChild.dislikes || []).join(", ")}
+                      onChange={(e) =>
+                        setSelectedChild({
+                          ...selectedChild,
+                          dislikes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                        })
+                      }
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </Card>
+        )}
+
+        {/* Section 5: Parent Preferences */}
+        <Card className="p-4 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-primary" />
+              <h2 className="font-semibold">Préférences du parent</h2>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleSaveParentPreferences} className="gap-1">
+              <Save className="w-4 h-4" />
+              Enregistrer
+            </Button>
+          </div>
+
+          <div className="space-y-6">
+            {/* Style cuisine */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Style de cuisine favori</Label>
+              <div className="flex flex-wrap gap-3">
+                {STYLE_CUISINE_OPTIONS.map((s) => (
+                  <div key={s.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`style-${s.id}`}
+                      checked={parentPreferences.style_cuisine.includes(s.id)}
+                      onCheckedChange={(checked) => {
+                        const updated = checked
+                          ? [...parentPreferences.style_cuisine, s.id]
+                          : parentPreferences.style_cuisine.filter((v) => v !== s.id);
+                        setParentPreferences({ ...parentPreferences, style_cuisine: updated });
+                      }}
+                    />
+                    <Label htmlFor={`style-${s.id}`} className="text-sm cursor-pointer">
+                      {s.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Difficulté parent */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Niveau de difficulté souhaité</Label>
+              <RadioGroup
+                value={parentPreferences.difficulte}
+                onValueChange={(v) => setParentPreferences({ ...parentPreferences, difficulte: v })}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="tres_facile" id="parent-tres-facile" />
+                  <Label htmlFor="parent-tres-facile" className="cursor-pointer">Très facile</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="facile" id="parent-facile" />
+                  <Label htmlFor="parent-facile" className="cursor-pointer">Facile</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="moyen" id="parent-moyen" />
+                  <Label htmlFor="parent-moyen" className="cursor-pointer">Moyen</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <Separator />
+
+            {/* Allergènes famille */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Allergènes à éviter pour toute la famille</Label>
+              <div className="flex flex-wrap gap-3">
+                {["Gluten", "Lactose", "Fruits à coque", "Œufs", "Aucun"].map((a) => (
+                  <div key={a} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`fam-allergy-${a}`}
+                      checked={parentPreferences.allergenes_famille.includes(a)}
+                      onCheckedChange={(checked) => {
+                        let updated: string[];
+                        if (a === "Aucun") {
+                          updated = checked ? ["Aucun"] : [];
+                        } else {
+                          updated = checked
+                            ? [...parentPreferences.allergenes_famille.filter((v) => v !== "Aucun"), a]
+                            : parentPreferences.allergenes_famille.filter((v) => v !== a);
+                        }
+                        setParentPreferences({ ...parentPreferences, allergenes_famille: updated });
+                      }}
+                    />
+                    <Label htmlFor={`fam-allergy-${a}`} className="text-sm cursor-pointer">
+                      {a}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Matériel maison */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Matériel disponible à la maison</Label>
+              <div className="flex flex-wrap gap-3">
+                {MATERIEL_OPTIONS.map((m) => (
+                  <div key={m.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`parent-materiel-${m.id}`}
+                      checked={parentPreferences.materiel_maison.includes(m.id)}
+                      onCheckedChange={(checked) => {
+                        const updated = checked
+                          ? [...parentPreferences.materiel_maison, m.id]
+                          : parentPreferences.materiel_maison.filter((v) => v !== m.id);
+                        setParentPreferences({ ...parentPreferences, materiel_maison: updated });
+                      }}
+                    />
+                    <Label htmlFor={`parent-materiel-${m.id}`} className="text-sm cursor-pointer">
+                      {m.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </Card>
+
+        {/* Footer actions */}
+        <div className="flex justify-between">
+          <Button variant="outline" onClick={() => navigate("/dashboard")} className="gap-1">
+            <ArrowLeft className="w-4 h-4" />
+            Retour au Dashboard
+          </Button>
+        </div>
       </div>
 
       {/* Add Child Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Ajouter un enfant</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Ajouter un enfant
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="name">Prénom *</Label>
+              <Label htmlFor="new-name">Prénom *</Label>
               <Input
-                id="name"
+                id="new-name"
                 value={newChild.name}
                 onChange={(e) => setNewChild({ ...newChild, name: e.target.value })}
                 placeholder="Prénom de l'enfant"
               />
             </div>
             <div>
-              <Label htmlFor="birth_date">Date de naissance *</Label>
+              <Label htmlFor="new-birth">Date de naissance *</Label>
               <Input
-                id="birth_date"
+                id="new-birth"
                 type="date"
                 value={newChild.birth_date}
                 onChange={(e) => setNewChild({ ...newChild, birth_date: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="allergies">Allergies (séparées par des virgules)</Label>
-              <Input
-                id="allergies"
-                value={newChild.allergies}
-                onChange={(e) => setNewChild({ ...newChild, allergies: e.target.value })}
-                placeholder="Ex: gluten, lactose"
-              />
-            </div>
-            <div>
-              <Label htmlFor="preferences">Préférences alimentaires</Label>
-              <Input
-                id="preferences"
-                value={newChild.preferences}
-                onChange={(e) => setNewChild({ ...newChild, preferences: e.target.value })}
-                placeholder="Ex: pâtes, poulet"
-              />
-            </div>
-            <div>
-              <Label htmlFor="dislikes">Ce qu'il/elle n'aime pas</Label>
-              <Input
-                id="dislikes"
-                value={newChild.dislikes}
-                onChange={(e) => setNewChild({ ...newChild, dislikes: e.target.value })}
-                placeholder="Ex: épinards, poisson"
               />
             </div>
           </div>
@@ -346,109 +983,6 @@ const ProfileSettings = () => {
               Annuler
             </Button>
             <Button onClick={handleAddChild}>Ajouter</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Child Dialog */}
-      <Dialog open={!!editingChild} onOpenChange={() => setEditingChild(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Modifier le profil</DialogTitle>
-          </DialogHeader>
-          {editingChild && (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="edit-name">Prénom</Label>
-                <Input
-                  id="edit-name"
-                  value={editingChild.name}
-                  onChange={(e) => setEditingChild({ ...editingChild, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-birth">Date de naissance</Label>
-                <Input
-                  id="edit-birth"
-                  type="date"
-                  value={editingChild.birth_date}
-                  onChange={(e) =>
-                    setEditingChild({ ...editingChild, birth_date: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-allergies">Allergies</Label>
-                <Input
-                  id="edit-allergies"
-                  value={(editingChild.allergies || []).join(", ")}
-                  onChange={(e) =>
-                    setEditingChild({
-                      ...editingChild,
-                      allergies: e.target.value.split(",").map((s) => s.trim()),
-                    })
-                  }
-                  placeholder="Ex: gluten, lactose"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-prefs">Préférences</Label>
-                <Input
-                  id="edit-prefs"
-                  value={(editingChild.preferences || []).join(", ")}
-                  onChange={(e) =>
-                    setEditingChild({
-                      ...editingChild,
-                      preferences: e.target.value.split(",").map((s) => s.trim()),
-                    })
-                  }
-                  placeholder="Ex: pâtes, poulet"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-dislikes">Ce qu'il/elle n'aime pas</Label>
-                <Input
-                  id="edit-dislikes"
-                  value={(editingChild.dislikes || []).join(", ")}
-                  onChange={(e) =>
-                    setEditingChild({
-                      ...editingChild,
-                      dislikes: e.target.value.split(",").map((s) => s.trim()),
-                    })
-                  }
-                  placeholder="Ex: épinards, poisson"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-time">Temps de préparation max (min)</Label>
-                <Select
-                  value={String(editingChild.available_time || 30)}
-                  onValueChange={(v) =>
-                    setEditingChild({ ...editingChild, available_time: Number(v) })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background">
-                    <SelectItem value="15">15 minutes</SelectItem>
-                    <SelectItem value="20">20 minutes</SelectItem>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                    <SelectItem value="45">45 minutes</SelectItem>
-                    <SelectItem value="60">60 minutes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingChild(null)}>
-              Annuler
-            </Button>
-            <Button onClick={handleUpdateChild} className="gap-1">
-              <Save className="w-4 h-4" />
-              Enregistrer
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

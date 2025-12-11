@@ -13,6 +13,9 @@ interface Child {
   preferences: string[] | null;
   dislikes: string[] | null;
   available_time: number | null;
+  dejeuner_habituel?: string;
+  regime_special?: boolean;
+  sortie_scolaire_dates?: string[] | null;
 }
 
 interface MealData {
@@ -50,15 +53,24 @@ export const useDashboardData = (userId: string) => {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState<MealSlot | null>(null);
 
-  const getChildMealConfig = useCallback((child: Child): ChildMealConfig => {
-    // Un enfant a un régime spécial s'il a des allergies
-    const hasSpecialDiet = Boolean(child.allergies && child.allergies.filter(a => a && a.trim() !== '').length > 0);
+  const getChildMealConfig = useCallback((child: Child, dateStr?: string): ChildMealConfig => {
+    // Vérifier régime spécial depuis les paramètres du profil
+    const hasSpecialDiet = Boolean(child.regime_special);
     
-    // TODO: Ces valeurs devraient venir d'un calendrier ou des paramètres utilisateur
+    // Vérifier si aujourd'hui est une sortie scolaire
+    const today = dateStr || format(new Date(), 'yyyy-MM-dd');
+    const hasSchoolTripToday = Boolean(
+      child.sortie_scolaire_dates && 
+      child.sortie_scolaire_dates.includes(today)
+    );
+    
+    // Vérifier si l'enfant mange à la cantine
+    const eatsAtCanteen = child.dejeuner_habituel === 'cantine';
+    
     return {
       hasSpecialDiet,
-      hasSchoolTripToday: false, // À implémenter avec un calendrier scolaire
-      eatsAtCanteen: false, // À implémenter dans les paramètres enfant
+      hasSchoolTripToday,
+      eatsAtCanteen,
     };
   }, []);
 
@@ -77,8 +89,8 @@ export const useDashboardData = (userId: string) => {
     const weekStartStr = format(weekStart, 'yyyy-MM-dd');
     const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
 
-    // Déterminer le type de déjeuner pour cet enfant
-    const childConfig = getChildMealConfig(child);
+    // Déterminer le type de déjeuner pour cet enfant avec la date
+    const childConfig = getChildMealConfig(child, todayStr);
     const lunchType = determineLunchType(childConfig);
 
     try {
