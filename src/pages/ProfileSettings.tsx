@@ -74,6 +74,10 @@ interface ParentPreferences {
   difficulte: string;
   allergenes_famille: string[];
   materiel_maison: string[];
+  // Nouvelles préférences de planification
+  cooking_frequency: 'daily' | 'every_2_days' | 'twice_a_week' | 'once_a_week';
+  reuse_level: 0 | 1 | 2 | 3 | 'auto';
+  include_weekend: boolean;
 }
 
 const ALLERGIES_OPTIONS = [
@@ -134,6 +138,9 @@ const ProfileSettings = () => {
     difficulte: "facile",
     allergenes_famille: [],
     materiel_maison: [],
+    cooking_frequency: 'every_2_days',
+    reuse_level: 'auto',
+    include_weekend: true,
   });
   const [newChild, setNewChild] = useState({
     name: "",
@@ -196,6 +203,9 @@ const ProfileSettings = () => {
           difficulte: prefs.difficulte || "facile",
           allergenes_famille: prefs.allergenes_famille || [],
           materiel_maison: prefs.materiel_maison || [],
+          cooking_frequency: prefs.cooking_frequency || 'every_2_days',
+          reuse_level: prefs.reuse_level ?? 'auto',
+          include_weekend: prefs.include_weekend ?? true,
         });
       }
     } catch (error) {
@@ -831,113 +841,223 @@ const ProfileSettings = () => {
             </Button>
           </div>
 
-          <div className="space-y-6">
-            {/* Style cuisine */}
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Style de cuisine favori</Label>
-              <div className="flex flex-wrap gap-3">
-                {STYLE_CUISINE_OPTIONS.map((s) => (
-                  <div key={s.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`style-${s.id}`}
-                      checked={parentPreferences.style_cuisine.includes(s.id)}
-                      onCheckedChange={(checked) => {
-                        const updated = checked
-                          ? [...parentPreferences.style_cuisine, s.id]
-                          : parentPreferences.style_cuisine.filter((v) => v !== s.id);
-                        setParentPreferences({ ...parentPreferences, style_cuisine: updated });
-                      }}
-                    />
-                    <Label htmlFor={`style-${s.id}`} className="text-sm cursor-pointer">
-                      {s.label}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Difficulté parent */}
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Niveau de difficulté souhaité</Label>
-              <RadioGroup
-                value={parentPreferences.difficulte}
-                onValueChange={(v) => setParentPreferences({ ...parentPreferences, difficulte: v })}
-                className="flex gap-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="tres_facile" id="parent-tres-facile" />
-                  <Label htmlFor="parent-tres-facile" className="cursor-pointer">Très facile</Label>
+          <Accordion type="multiple" defaultValue={["planning", "cuisine"]} className="space-y-2">
+            {/* Section Planification - NOUVELLE */}
+            <AccordionItem value="planning" className="border rounded-lg px-3 bg-primary/5">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  <span className="font-medium">Mode Parent Pressé 🏃</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="facile" id="parent-facile" />
-                  <Label htmlFor="parent-facile" className="cursor-pointer">Facile</Label>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-6 pt-4">
+                {/* Fréquence de cuisine */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">À quelle fréquence cuisinez-vous ?</Label>
+                  <RadioGroup
+                    value={parentPreferences.cooking_frequency}
+                    onValueChange={(v) => setParentPreferences({ ...parentPreferences, cooking_frequency: v as any })}
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                  >
+                    {[
+                      { value: 'daily', label: 'Tous les jours', desc: '7 recettes/semaine' },
+                      { value: 'every_2_days', label: 'Tous les 2 jours', desc: '4 recettes/semaine' },
+                      { value: 'twice_a_week', label: '2 fois par semaine', desc: '2 recettes max' },
+                      { value: 'once_a_week', label: '1 fois par semaine', desc: 'Batch cooking' },
+                    ].map((opt) => (
+                      <div key={opt.value} className="flex items-start space-x-2 p-2 rounded-lg border hover:bg-muted/50">
+                        <RadioGroupItem value={opt.value} id={`freq-${opt.value}`} className="mt-0.5" />
+                        <Label htmlFor={`freq-${opt.value}`} className="cursor-pointer flex-1">
+                          <span className="block font-medium text-sm">{opt.label}</span>
+                          <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="moyen" id="parent-moyen" />
-                  <Label htmlFor="parent-moyen" className="cursor-pointer">Moyen</Label>
+
+                <Separator />
+
+                {/* Niveau de réutilisation */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Combien de fois réutiliser chaque plat ?</Label>
+                  <RadioGroup
+                    value={String(parentPreferences.reuse_level)}
+                    onValueChange={(v) => setParentPreferences({ 
+                      ...parentPreferences, 
+                      reuse_level: v === 'auto' ? 'auto' : parseInt(v) as any 
+                    })}
+                    className="grid grid-cols-2 sm:grid-cols-3 gap-2"
+                  >
+                    {[
+                      { value: '0', label: 'Jamais', desc: 'Plats uniques' },
+                      { value: '1', label: '2 repas', desc: 'Cuisiner → manger 2x' },
+                      { value: '2', label: '3 repas', desc: 'Cuisiner → manger 3x' },
+                      { value: '3', label: '4 repas', desc: 'Max réutilisation' },
+                      { value: 'auto', label: '✨ Auto', desc: "L'IA décide" },
+                    ].map((opt) => (
+                      <div key={opt.value} className="flex items-start space-x-2 p-2 rounded-lg border hover:bg-muted/50">
+                        <RadioGroupItem value={opt.value} id={`reuse-${opt.value}`} className="mt-0.5" />
+                        <Label htmlFor={`reuse-${opt.value}`} className="cursor-pointer flex-1">
+                          <span className="block font-medium text-sm">{opt.label}</span>
+                          <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
                 </div>
-              </RadioGroup>
-            </div>
 
-            <Separator />
+                <Separator />
 
-            {/* Allergènes famille */}
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Allergènes à éviter pour toute la famille</Label>
-              <div className="flex flex-wrap gap-3">
-                {["Gluten", "Lactose", "Fruits à coque", "Œufs", "Aucun"].map((a) => (
-                  <div key={a} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`fam-allergy-${a}`}
-                      checked={parentPreferences.allergenes_famille.includes(a)}
-                      onCheckedChange={(checked) => {
-                        let updated: string[];
-                        if (a === "Aucun") {
-                          updated = checked ? ["Aucun"] : [];
-                        } else {
-                          updated = checked
-                            ? [...parentPreferences.allergenes_famille.filter((v) => v !== "Aucun"), a]
-                            : parentPreferences.allergenes_famille.filter((v) => v !== a);
-                        }
-                        setParentPreferences({ ...parentPreferences, allergenes_famille: updated });
-                      }}
-                    />
-                    <Label htmlFor={`fam-allergy-${a}`} className="text-sm cursor-pointer">
-                      {a}
-                    </Label>
+                {/* Inclure le week-end */}
+                <div className="flex items-center justify-between p-3 rounded-lg border">
+                  <div>
+                    <Label className="text-sm font-medium">Planifier le week-end ?</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {parentPreferences.include_weekend 
+                        ? 'Lundi → Dimanche (7 jours)' 
+                        : 'Lundi → Vendredi (5 jours)'}
+                    </p>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <Switch
+                    checked={parentPreferences.include_weekend}
+                    onCheckedChange={(checked) => 
+                      setParentPreferences({ ...parentPreferences, include_weekend: checked })
+                    }
+                  />
+                </div>
 
-            <Separator />
+                {/* Résumé */}
+                <div className="p-3 bg-primary/10 rounded-lg">
+                  <p className="text-sm font-medium text-primary">📊 Votre configuration :</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {parentPreferences.cooking_frequency === 'once_a_week' && 'Mode batch cooking : 1 session cuisine pour la semaine'}
+                    {parentPreferences.cooking_frequency === 'twice_a_week' && 'Vous cuisinerez 2 fois, le reste sera des réutilisations'}
+                    {parentPreferences.cooking_frequency === 'every_2_days' && 'Cuisine un jour sur deux avec réutilisations'}
+                    {parentPreferences.cooking_frequency === 'daily' && 'Cuisine quotidienne avec possibilité de réutilisation'}
+                    {!parentPreferences.include_weekend && ' • Week-end exclu'}
+                  </p>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
 
-            {/* Matériel maison */}
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Matériel disponible à la maison</Label>
-              <div className="flex flex-wrap gap-3">
-                {MATERIEL_OPTIONS.map((m) => (
-                  <div key={m.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`parent-materiel-${m.id}`}
-                      checked={parentPreferences.materiel_maison.includes(m.id)}
-                      onCheckedChange={(checked) => {
-                        const updated = checked
-                          ? [...parentPreferences.materiel_maison, m.id]
-                          : parentPreferences.materiel_maison.filter((v) => v !== m.id);
-                        setParentPreferences({ ...parentPreferences, materiel_maison: updated });
-                      }}
-                    />
-                    <Label htmlFor={`parent-materiel-${m.id}`} className="text-sm cursor-pointer">
-                      {m.label}
-                    </Label>
+            {/* Section Cuisine existante */}
+            <AccordionItem value="cuisine" className="border rounded-lg px-3">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <ChefHat className="w-4 h-4 text-orange-500" />
+                  <span>Style de cuisine & équipement</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-6 pt-4">
+                {/* Style cuisine */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Style de cuisine favori</Label>
+                  <div className="flex flex-wrap gap-3">
+                    {STYLE_CUISINE_OPTIONS.map((s) => (
+                      <div key={s.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`style-${s.id}`}
+                          checked={parentPreferences.style_cuisine.includes(s.id)}
+                          onCheckedChange={(checked) => {
+                            const updated = checked
+                              ? [...parentPreferences.style_cuisine, s.id]
+                              : parentPreferences.style_cuisine.filter((v) => v !== s.id);
+                            setParentPreferences({ ...parentPreferences, style_cuisine: updated });
+                          }}
+                        />
+                        <Label htmlFor={`style-${s.id}`} className="text-sm cursor-pointer">
+                          {s.label}
+                        </Label>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
+                </div>
+
+                <Separator />
+
+                {/* Difficulté parent */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Niveau de difficulté souhaité</Label>
+                  <RadioGroup
+                    value={parentPreferences.difficulte}
+                    onValueChange={(v) => setParentPreferences({ ...parentPreferences, difficulte: v })}
+                    className="flex gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="tres_facile" id="parent-tres-facile" />
+                      <Label htmlFor="parent-tres-facile" className="cursor-pointer">Très facile</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="facile" id="parent-facile" />
+                      <Label htmlFor="parent-facile" className="cursor-pointer">Facile</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="moyen" id="parent-moyen" />
+                      <Label htmlFor="parent-moyen" className="cursor-pointer">Moyen</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <Separator />
+
+                {/* Allergènes famille */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Allergènes à éviter pour toute la famille</Label>
+                  <div className="flex flex-wrap gap-3">
+                    {["Gluten", "Lactose", "Fruits à coque", "Œufs", "Aucun"].map((a) => (
+                      <div key={a} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`fam-allergy-${a}`}
+                          checked={parentPreferences.allergenes_famille.includes(a)}
+                          onCheckedChange={(checked) => {
+                            let updated: string[];
+                            if (a === "Aucun") {
+                              updated = checked ? ["Aucun"] : [];
+                            } else {
+                              updated = checked
+                                ? [...parentPreferences.allergenes_famille.filter((v) => v !== "Aucun"), a]
+                                : parentPreferences.allergenes_famille.filter((v) => v !== a);
+                            }
+                            setParentPreferences({ ...parentPreferences, allergenes_famille: updated });
+                          }}
+                        />
+                        <Label htmlFor={`fam-allergy-${a}`} className="text-sm cursor-pointer">
+                          {a}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Matériel maison */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Matériel disponible à la maison</Label>
+                  <div className="flex flex-wrap gap-3">
+                    {MATERIEL_OPTIONS.map((m) => (
+                      <div key={m.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`parent-materiel-${m.id}`}
+                          checked={parentPreferences.materiel_maison.includes(m.id)}
+                          onCheckedChange={(checked) => {
+                            const updated = checked
+                              ? [...parentPreferences.materiel_maison, m.id]
+                              : parentPreferences.materiel_maison.filter((v) => v !== m.id);
+                            setParentPreferences({ ...parentPreferences, materiel_maison: updated });
+                          }}
+                        />
+                        <Label htmlFor={`parent-materiel-${m.id}`} className="text-sm cursor-pointer">
+                          {m.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Card>
 
         {/* Footer actions */}
