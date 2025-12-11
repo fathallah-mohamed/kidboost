@@ -20,8 +20,11 @@ import { LunchType, determineLunchType, ChildMealConfig } from "@/lib/meals";
 interface Ingredient {
   name?: string;
   ingredient?: string;
+  item?: string;
+  nom?: string;
   quantity?: number | string;
   unit?: string;
+  unite?: string;
 }
 
 interface ShoppingItem {
@@ -300,10 +303,16 @@ export default function ShoppingList() {
         }
 
         ingredients.forEach((ing) => {
-          const name = typeof ing === 'string' ? ing : (ing.name || ing.ingredient || 'Ingrédient');
+          // Support multiple possible property names for ingredient name
+          const name = typeof ing === 'string' 
+            ? ing 
+            : (ing.item || ing.name || ing.ingredient || ing.nom || 'Ingrédient');
+          
+          if (!name || name === 'Ingrédient') return; // Skip invalid ingredients
+          
           const normalizedName = normalizeIngredientName(name);
           const quantity = typeof ing === 'object' ? parseQuantity(ing.quantity) : 1;
-          const unit = typeof ing === 'object' ? (ing.unit || '') : '';
+          const unit = typeof ing === 'object' ? (ing.unit || ing.unite || '') : '';
 
           if (ingredientMap.has(normalizedName)) {
             const existing = ingredientMap.get(normalizedName)!;
