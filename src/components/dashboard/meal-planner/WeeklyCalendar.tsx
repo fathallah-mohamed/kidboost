@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { format, startOfWeek, addDays, startOfMonth, endOfMonth, isSameMonth, addWeeks, subWeeks } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Recipe, ChildProfile } from '../types';
-import { ChevronLeft, ChevronRight, Clock, Utensils, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Utensils, Trash2, Sparkles, RotateCcw } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
 
 interface WeeklyCalendarProps {
   selectedDate: Date;
@@ -58,6 +59,37 @@ export const WeeklyCalendar = ({
 
   const getInitials = (name: string) => {
     return name.substring(0, 2).toUpperCase();
+  };
+
+  // Déterminer si une recette est une réutilisation dans la semaine
+  const isRecipeReuse = (recipeId: string, currentDate: string): boolean => {
+    const current = new Date(currentDate);
+    
+    // Chercher si cette recette est utilisée un jour antérieur dans la semaine
+    for (const [dateStr, childRecipes] of Object.entries(plannedRecipes)) {
+      const date = new Date(dateStr);
+      if (date < current) {
+        for (const recipe of Object.values(childRecipes)) {
+          if (recipe.id === recipeId) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
+
+  // Compter les utilisations d'une recette dans la semaine
+  const getRecipeUsageCount = (recipeId: string): number => {
+    let count = 0;
+    for (const childRecipes of Object.values(plannedRecipes)) {
+      for (const recipe of Object.values(childRecipes)) {
+        if (recipe.id === recipeId) {
+          count++;
+        }
+      }
+    }
+    return count;
   };
 
   const days = getDaysToDisplay();
@@ -133,10 +165,26 @@ export const WeeklyCalendar = ({
                     const child = selectedChildren.find(c => c.id === childId);
                     if (!child) return null;
 
+                    const isReuse = isRecipeReuse(recipe.id, formattedDate);
+                    const usageCount = getRecipeUsageCount(recipe.id);
+
                     return (
                       <div key={`${childId}-${recipe.id}`} className="p-3 bg-secondary/20 rounded-lg">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
+                            {/* Badge réutilisation ou nouvelle recette */}
+                            {isReuse ? (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 mb-1.5 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800">
+                                <RotateCcw className="w-2.5 h-2.5 mr-0.5" />
+                                Déjà préparé
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 mb-1.5 bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800">
+                                <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                                Nouvelle recette
+                              </Badge>
+                            )}
+                            
                             <div className="flex items-center gap-2">
                               <Tooltip>
                                 <TooltipTrigger>
@@ -161,6 +209,11 @@ export const WeeklyCalendar = ({
                                 <Utensils className="w-3 h-3" />
                                 <span>{recipe.meal_type}</span>
                               </div>
+                              {usageCount > 1 && (
+                                <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                                  ×{usageCount} cette semaine
+                                </span>
+                              )}
                             </div>
                           </div>
 
