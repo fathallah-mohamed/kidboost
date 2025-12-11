@@ -119,30 +119,45 @@ const MealCard = ({
   const generateLabel = getGenerateButtonLabel(slot, lunchType);
   const isSpecialDiet = slot === 'lunch' && lunchType === 'special_diet';
   const isSchoolTrip = slot === 'lunch' && lunchType === 'school_trip';
+  const isHomeLunch = slot === 'lunch' && lunchType === 'home';
+
+  // Sub-labels pour chaque type de déjeuner
+  const getSubLabel = () => {
+    if (slot !== 'lunch') return null;
+    switch (lunchType) {
+      case 'home':
+        return "Repas à préparer aujourd'hui";
+      case 'special_diet':
+        return "Régime alimentaire spécial";
+      case 'school_trip':
+        return "Pique-nique obligatoire";
+      default:
+        return null;
+    }
+  };
+
+  const subLabel = getSubLabel();
 
   return (
-    <Card className={`px-3 py-3 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all border-b border-border/30`}>
+    <Card className={`px-3 py-3.5 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all border-b border-border/30`}>
       <div className="flex items-center gap-3">
         <div className={`p-2 ${config.iconBg} rounded-lg`}>
           <Icon className={`w-5 h-5 ${config.accentColor}`} />
         </div>
         
         <div className="flex-1 min-w-0">
-          <span className="text-xs font-bold text-foreground block leading-tight">
+          <span className="text-sm font-bold text-foreground block leading-tight">
             {label}
           </span>
           
-          {/* Label régime spécial */}
-          {isSpecialDiet && (
-            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-              Régime alimentaire spécial
-            </span>
-          )}
-          
-          {/* Label sortie scolaire */}
-          {isSchoolTrip && (
-            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-              Sortie scolaire
+          {/* Sub-label pour le déjeuner */}
+          {subLabel && (
+            <span className={`text-[10px] font-medium ${
+              isSchoolTrip ? 'text-blue-600 dark:text-blue-400' :
+              isSpecialDiet ? 'text-amber-600 dark:text-amber-400' :
+              'text-muted-foreground'
+            }`}>
+              {subLabel}
             </span>
           )}
           
@@ -173,7 +188,7 @@ const MealCard = ({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground mt-0.5">Pas de recette</p>
+            <p className="text-sm text-muted-foreground italic mt-0.5">Aucune recette ajoutée</p>
           )}
         </div>
 
@@ -333,7 +348,7 @@ export const TodayMeals = ({
         </Button>
       </div>
       
-      <div className="space-y-2">
+      <div className="space-y-3">
         <MealCard
           slot="breakfast"
           recipeName={meals.breakfast.name}
