@@ -11,6 +11,7 @@ import { CompactActionCards } from "./CompactActionCards";
 import { MiniCalendar } from "./MiniCalendar";
 import { NutritionBalance } from "./NutritionBalance";
 import { QuickStartGuide } from "./QuickStartGuide";
+import { MealSlot, LunchType, determineLunchType } from "@/lib/meals";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,12 @@ interface Child {
   available_time: number | null;
 }
 
+interface MealData {
+  name: string | null;
+  prepTime?: number;
+  recipeId?: string;
+}
+
 interface WelcomeSectionProps {
   userId: string;
   onSectionChange: (section: string) => void;
@@ -43,10 +50,12 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   const [showChildSelector, setShowChildSelector] = useState(false);
   const [dashboardData, setDashboardData] = useState<{
     todayMeals: {
-      snack: { name: string | null; prepTime?: number; recipeId?: string };
-      dinner: { name: string | null; prepTime?: number; recipeId?: string };
-      lunchbox: { name: string | null; prepTime?: number; recipeId?: string };
+      breakfast: MealData;
+      lunch: MealData;
+      snack: MealData;
+      dinner: MealData;
     };
+    lunchType: LunchType;
     plannedDays: string[];
     stats: {
       recipesReady: number;
@@ -58,10 +67,12 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     nutrition: { vegetables: number; proteins: number; starches: number; dairy: number };
   }>({
     todayMeals: {
+      breakfast: { name: null },
+      lunch: { name: null },
       snack: { name: null },
       dinner: { name: null },
-      lunchbox: { name: null },
     },
+    lunchType: 'home',
     plannedDays: [],
     stats: {
       recipesReady: 0,
@@ -136,8 +147,6 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     return age;
   };
 
-  const hasLunchboxObjective = selectedChild?.meal_objectives?.includes('lunchbox') ?? false;
-
   const handleActionSelect = async (action: string) => {
     if (action === "quick-plan") {
       navigate(`/planning-express${selectedChild ? `?childId=${selectedChild.id}` : ""}`);
@@ -156,32 +165,31 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     navigate(`/planning/day/${date}${selectedChild ? `?childId=${selectedChild.id}` : ""}`);
   };
 
-  const handleViewRecipe = (type: string) => {
-    const meal = dashboardData.todayMeals[type as keyof typeof dashboardData.todayMeals];
+  const handleViewRecipe = (slot: MealSlot) => {
+    const meal = dashboardData.todayMeals[slot];
     if (meal?.recipeId) {
-      navigate(`/dashboard/recipe/${meal.recipeId}`);
+      navigate(`/recipe/${meal.recipeId}`);
     }
   };
 
-  const handleReplaceRecipe = async (type: string) => {
+  const handleReplaceRecipe = async (slot: MealSlot) => {
     if (!selectedChild) return;
     
-    const mealType = type as 'snack' | 'dinner' | 'lunchbox';
-    const newMeal = await generateMeal(selectedChild, mealType);
+    const newMeal = await generateMeal(selectedChild, slot);
     
     if (newMeal) {
       setDashboardData(prev => ({
         ...prev,
         todayMeals: {
           ...prev.todayMeals,
-          [mealType]: newMeal,
+          [slot]: newMeal,
         },
       }));
     }
   };
 
-  const handleAddToList = async (type: string) => {
-    const meal = dashboardData.todayMeals[type as keyof typeof dashboardData.todayMeals];
+  const handleAddToList = async (slot: MealSlot) => {
+    const meal = dashboardData.todayMeals[slot];
     if (!meal?.recipeId) return;
 
     // Get recipe ingredients
@@ -266,14 +274,12 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
         )}
       </div>
 
-      {/* Today's Meals */}
+      {/* Today's Meals - 4 repas fixes */}
       {selectedChild && (
         <TodayMeals
           childName={selectedChild.name}
-          snack={dashboardData.todayMeals.snack}
-          dinner={dashboardData.todayMeals.dinner}
-          lunchbox={dashboardData.todayMeals.lunchbox}
-          showLunchbox={hasLunchboxObjective}
+          meals={dashboardData.todayMeals}
+          lunchType={dashboardData.lunchType}
           generating={generating}
           onViewRecipe={handleViewRecipe}
           onReplaceRecipe={handleReplaceRecipe}

@@ -4,11 +4,12 @@ import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, Plus, Cookie, Utensils, Sandwich, Clock, ChefHat, Heart } from "lucide-react";
+import { ArrowLeft, Search, Plus, Coffee, Utensils, Cookie, Moon, Clock, ChefHat, Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { MealSlot, MEAL_LABELS } from "@/lib/meals";
 
-type FilterType = "all" | "snack" | "dinner" | "lunchbox" | "favorites";
+type FilterType = "all" | MealSlot | "favorites";
 
 interface Recipe {
   id: string;
@@ -17,6 +18,13 @@ interface Recipe {
   preparation_time: number;
   difficulty: string;
 }
+
+const MEAL_ICONS: Record<MealSlot, typeof Coffee> = {
+  breakfast: Coffee,
+  lunch: Utensils,
+  snack: Cookie,
+  dinner: Moon,
+};
 
 export default function Recipes() {
   const navigate = useNavigate();
@@ -39,7 +47,12 @@ export default function Recipes() {
         .eq("profile_id", session.user.id);
 
       if (filter !== "all" && filter !== "favorites") {
-        query = query.eq("meal_type", filter);
+        // Handle legacy lunchbox type
+        if (filter === "lunch") {
+          query = query.or("meal_type.eq.lunch,meal_type.eq.lunchbox");
+        } else {
+          query = query.eq("meal_type", filter);
+        }
       }
 
       const { data: recipesData, error: recipesError } = await query.order("created_at", { ascending: false });
@@ -91,12 +104,14 @@ export default function Recipes() {
     }
   };
 
-  const filters = [
-    { type: "all" as FilterType, label: "Tous", icon: ChefHat },
-    { type: "favorites" as FilterType, label: "Favoris", icon: Heart },
-    { type: "snack" as FilterType, label: "Goûter", icon: Cookie },
-    { type: "dinner" as FilterType, label: "Repas", icon: Utensils },
-    { type: "lunchbox" as FilterType, label: "Lunchbox", icon: Sandwich },
+  // Filtres avec les 4 types de repas
+  const filters: { type: FilterType; label: string; icon: typeof ChefHat }[] = [
+    { type: "all", label: "Tous", icon: ChefHat },
+    { type: "favorites", label: "Favoris", icon: Heart },
+    { type: "breakfast", label: MEAL_LABELS.breakfast, icon: Coffee },
+    { type: "lunch", label: MEAL_LABELS.lunch, icon: Utensils },
+    { type: "snack", label: MEAL_LABELS.snack, icon: Cookie },
+    { type: "dinner", label: MEAL_LABELS.dinner, icon: Moon },
   ];
 
   const filteredRecipes = recipes.filter(recipe => {
@@ -106,11 +121,15 @@ export default function Recipes() {
   });
 
   const getMealTypeIcon = (type: string) => {
-    switch (type) {
-      case "snack": return Cookie;
-      case "lunchbox": return Sandwich;
-      default: return Utensils;
-    }
+    // Handle legacy lunchbox type
+    if (type === "lunchbox") return Utensils;
+    return MEAL_ICONS[type as MealSlot] || Utensils;
+  };
+
+  const getMealTypeLabel = (type: string) => {
+    // Handle legacy lunchbox type
+    if (type === "lunchbox") return "Déjeuner (Lunchbox)";
+    return MEAL_LABELS[type as MealSlot] || type;
   };
 
   return (
@@ -122,6 +141,9 @@ export default function Recipes() {
           </Button>
           <div className="flex-1">
             <h1 className="text-xl font-bold">Toutes les recettes</h1>
+            <p className="text-xs text-muted-foreground">
+              Petit-déjeuner, déjeuner, goûter et dîner
+            </p>
           </div>
           <Button onClick={() => navigate("/generate-meal")}>
             <Plus className="w-4 h-4 mr-2" />
@@ -190,11 +212,11 @@ export default function Recipes() {
                     <div className="flex-1">
                       <h3 className="font-semibold">{recipe.name}</h3>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{getMealTypeLabel(recipe.meal_type)}</span>
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {recipe.preparation_time} min
                         </span>
-                        <span className="capitalize">{recipe.difficulty}</span>
                       </div>
                     </div>
                     <Button

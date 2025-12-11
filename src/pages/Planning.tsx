@@ -3,10 +3,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Plus, Edit, Check, X, Cookie, Utensils } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Check, X, Coffee, Utensils, Cookie, Moon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
+import { MealSlot, MEAL_LABELS, MEAL_ORDER } from "@/lib/meals";
 
 interface PlannedMeal {
   id: string;
@@ -17,6 +18,13 @@ interface PlannedMeal {
     name: string;
   };
 }
+
+const MEAL_ICONS: Record<MealSlot, typeof Coffee> = {
+  breakfast: Coffee,
+  lunch: Utensils,
+  snack: Cookie,
+  dinner: Moon,
+};
 
 export default function Planning() {
   const navigate = useNavigate();
@@ -76,8 +84,17 @@ export default function Planning() {
     return plannedMeals.filter(meal => meal.date === date);
   };
 
-  const isPlanned = (date: string) => {
-    return getMealsForDay(date).length > 0;
+  const getMealForSlot = (date: string, slot: MealSlot) => {
+    const meals = getMealsForDay(date);
+    // Handle legacy lunchbox -> lunch conversion
+    if (slot === 'lunch') {
+      return meals.find(m => m.meal_time === 'lunch' || m.meal_time === 'lunchbox');
+    }
+    return meals.find(m => m.meal_time === slot);
+  };
+
+  const countPlannedMeals = (date: string) => {
+    return getMealsForDay(date).length;
   };
 
   return (
@@ -90,7 +107,7 @@ export default function Planning() {
           <div>
             <h1 className="text-xl font-bold">Planification de la semaine</h1>
             <p className="text-sm text-muted-foreground">
-              Organisez les repas de votre enfant
+              Organisez les 4 repas quotidiens de votre enfant
             </p>
           </div>
         </div>
@@ -102,8 +119,8 @@ export default function Planning() {
         ) : (
           <div className="space-y-3">
             {weekDays.map((day) => {
-              const meals = getMealsForDay(day.date);
-              const planned = isPlanned(day.date);
+              const plannedCount = countPlannedMeals(day.date);
+              const isFullyPlanned = plannedCount >= 4;
               
               return (
                 <Card
@@ -125,7 +142,8 @@ export default function Planning() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {planned ? (
+                      <span className="text-xs text-muted-foreground">{plannedCount}/4</span>
+                      {isFullyPlanned ? (
                         <Check className="w-4 h-4 text-pastel-green" />
                       ) : (
                         <X className="w-4 h-4 text-destructive" />
@@ -133,35 +151,38 @@ export default function Planning() {
                     </div>
                   </div>
 
-                  {meals.length > 0 ? (
-                    <div className="space-y-2">
-                      {meals.map((meal) => (
+                  {/* Afficher les 4 repas */}
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {MEAL_ORDER.map((slot) => {
+                      const meal = getMealForSlot(day.date, slot);
+                      const Icon = MEAL_ICONS[slot];
+                      return (
                         <div
-                          key={meal.id}
-                          className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg text-sm"
+                          key={slot}
+                          className={`flex items-center gap-2 p-2 rounded-lg text-xs ${
+                            meal ? "bg-muted/50" : "bg-muted/20 border border-dashed border-muted"
+                          }`}
                         >
-                          {meal.meal_time === "snack" ? (
-                            <Cookie className="w-4 h-4 text-pastel-yellow-foreground" />
-                          ) : (
-                            <Utensils className="w-4 h-4 text-primary" />
+                          <Icon className={`w-4 h-4 ${meal ? "text-primary" : "text-muted-foreground"}`} />
+                          <span className={`flex-1 truncate ${!meal ? "text-muted-foreground italic" : ""}`}>
+                            {meal?.recipe?.name || MEAL_LABELS[slot]}
+                          </span>
+                          {meal && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 w-5 p-0"
+                              onClick={() => navigate(`/recipe/${meal.recipe?.id}`)}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
                           )}
-                          <span className="flex-1">{meal.recipe?.name || "Recette"}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => navigate(`/dashboard/recipe/${meal.recipe?.id}`)}
-                          >
-                            <Edit className="w-3 h-3" />
-                          </Button>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Aucun repas planifié</p>
-                  )}
+                      );
+                    })}
+                  </div>
 
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -169,7 +190,7 @@ export default function Planning() {
                       onClick={() => navigate(`/planning/day/${day.date}${childId ? `?childId=${childId}` : ""}`)}
                     >
                       <Plus className="w-4 h-4 mr-1" />
-                      Ajouter
+                      Compléter
                     </Button>
                     <Button
                       variant="outline"

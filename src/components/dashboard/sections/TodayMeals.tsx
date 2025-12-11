@@ -1,41 +1,67 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, Eye, RefreshCw, Plus, Cookie, Utensils, Sandwich, Loader2 } from "lucide-react";
+import { Clock, Eye, RefreshCw, Plus, Coffee, Utensils, Cookie, Moon, Sandwich, Loader2, Ban } from "lucide-react";
+import { MealSlot, LunchType, MEAL_LABELS, LUNCH_CONFIGS } from "@/lib/meals";
 
 interface MealCardProps {
-  type: "snack" | "dinner" | "lunchbox";
+  slot: MealSlot;
   recipeName: string | null;
   prepTime?: number;
   generating?: boolean;
+  canGenerate: boolean;
+  lunchType?: LunchType;
   onView: () => void;
   onReplace: () => void;
   onAddToList: () => void;
 }
 
-const mealConfig = {
-  snack: {
-    icon: Cookie,
-    label: "Goûter",
-    gradient: "from-pastel-yellow/30 to-pastel-yellow/10",
-    iconBg: "bg-pastel-yellow/50",
-  },
-  dinner: {
-    icon: Utensils,
-    label: "Repas du soir",
-    gradient: "from-primary/20 to-primary/5",
-    iconBg: "bg-primary/30",
-  },
-  lunchbox: {
-    icon: Sandwich,
-    label: "Lunchbox",
-    gradient: "from-pastel-green/30 to-pastel-green/10",
-    iconBg: "bg-pastel-green/50",
-  },
+const getMealConfig = (slot: MealSlot, lunchType?: LunchType) => {
+  const configs: Record<MealSlot, { icon: typeof Coffee; gradient: string; iconBg: string }> = {
+    breakfast: {
+      icon: Coffee,
+      gradient: "from-amber-100/50 to-amber-50/30",
+      iconBg: "bg-amber-200/50",
+    },
+    lunch: {
+      icon: lunchType && LUNCH_CONFIGS[lunchType].isLunchbox ? Sandwich : Utensils,
+      gradient: "from-emerald-100/50 to-emerald-50/30",
+      iconBg: "bg-emerald-200/50",
+    },
+    snack: {
+      icon: Cookie,
+      gradient: "from-pastel-yellow/30 to-pastel-yellow/10",
+      iconBg: "bg-pastel-yellow/50",
+    },
+    dinner: {
+      icon: Moon,
+      gradient: "from-primary/20 to-primary/5",
+      iconBg: "bg-primary/30",
+    },
+  };
+  return configs[slot];
 };
 
-const MealCard = ({ type, recipeName, prepTime, generating, onView, onReplace, onAddToList }: MealCardProps) => {
-  const config = mealConfig[type];
+const getLabel = (slot: MealSlot, lunchType?: LunchType): string => {
+  if (slot === 'lunch' && lunchType) {
+    return LUNCH_CONFIGS[lunchType].label;
+  }
+  return MEAL_LABELS[slot];
+};
+
+const MealCard = ({ 
+  slot, 
+  recipeName, 
+  prepTime, 
+  generating, 
+  canGenerate, 
+  lunchType,
+  onView, 
+  onReplace, 
+  onAddToList 
+}: MealCardProps) => {
+  const config = getMealConfig(slot, lunchType);
   const Icon = config.icon;
+  const label = getLabel(slot, lunchType);
 
   return (
     <Card className={`px-2.5 py-2 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all`}>
@@ -45,11 +71,15 @@ const MealCard = ({ type, recipeName, prepTime, generating, onView, onReplace, o
         </div>
         
         <div className="flex-1 min-w-0">
-          <span className="text-[10px] font-semibold text-muted-foreground block leading-tight">{config.label}</span>
+          <span className="text-[10px] font-semibold text-muted-foreground block leading-tight">{label}</span>
           {generating ? (
             <div className="flex items-center gap-1">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span className="text-xs text-muted-foreground">Génération...</span>
+            </div>
+          ) : !canGenerate ? (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground italic">Aucune action requise</span>
             </div>
           ) : recipeName ? (
             <div className="flex items-center gap-1">
@@ -66,7 +96,7 @@ const MealCard = ({ type, recipeName, prepTime, generating, onView, onReplace, o
           )}
         </div>
 
-        {!generating && (
+        {!generating && canGenerate && (
           recipeName ? (
             <div className="flex gap-0.5">
               <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onView}>
@@ -85,34 +115,47 @@ const MealCard = ({ type, recipeName, prepTime, generating, onView, onReplace, o
             </Button>
           )
         )}
+
+        {!canGenerate && (
+          <Ban className="w-4 h-4 text-muted-foreground/50" />
+        )}
       </div>
     </Card>
   );
 };
 
+interface MealData {
+  name: string | null;
+  prepTime?: number;
+  recipeId?: string;
+}
+
 interface TodayMealsProps {
   childName: string;
-  snack: { name: string | null; prepTime?: number; recipeId?: string };
-  dinner: { name: string | null; prepTime?: number; recipeId?: string };
-  lunchbox?: { name: string | null; prepTime?: number; recipeId?: string };
-  showLunchbox: boolean;
-  generating?: string | null;
-  onViewRecipe: (type: string) => void;
-  onReplaceRecipe: (type: string) => void;
-  onAddToList: (type: string) => void;
+  meals: {
+    breakfast: MealData;
+    lunch: MealData;
+    snack: MealData;
+    dinner: MealData;
+  };
+  lunchType: LunchType;
+  generating?: MealSlot | null;
+  onViewRecipe: (slot: MealSlot) => void;
+  onReplaceRecipe: (slot: MealSlot) => void;
+  onAddToList: (slot: MealSlot) => void;
 }
 
 export const TodayMeals = ({
   childName,
-  snack,
-  dinner,
-  lunchbox,
-  showLunchbox,
+  meals,
+  lunchType,
   generating,
   onViewRecipe,
   onReplaceRecipe,
   onAddToList,
 }: TodayMealsProps) => {
+  const canGenerateLunch = LUNCH_CONFIGS[lunchType].canGenerate;
+
   return (
     <div className="space-y-1.5">
       <h2 className="text-base font-bold">
@@ -121,36 +164,49 @@ export const TodayMeals = ({
       
       <div className="space-y-1.5">
         <MealCard
-          type="snack"
-          recipeName={snack.name}
-          prepTime={snack.prepTime}
+          slot="breakfast"
+          recipeName={meals.breakfast.name}
+          prepTime={meals.breakfast.prepTime}
+          generating={generating === 'breakfast'}
+          canGenerate={true}
+          onView={() => onViewRecipe("breakfast")}
+          onReplace={() => onReplaceRecipe("breakfast")}
+          onAddToList={() => onAddToList("breakfast")}
+        />
+
+        <MealCard
+          slot="lunch"
+          recipeName={meals.lunch.name}
+          prepTime={meals.lunch.prepTime}
+          generating={generating === 'lunch'}
+          canGenerate={canGenerateLunch}
+          lunchType={lunchType}
+          onView={() => onViewRecipe("lunch")}
+          onReplace={() => onReplaceRecipe("lunch")}
+          onAddToList={() => onAddToList("lunch")}
+        />
+        
+        <MealCard
+          slot="snack"
+          recipeName={meals.snack.name}
+          prepTime={meals.snack.prepTime}
           generating={generating === 'snack'}
+          canGenerate={true}
           onView={() => onViewRecipe("snack")}
           onReplace={() => onReplaceRecipe("snack")}
           onAddToList={() => onAddToList("snack")}
         />
         
         <MealCard
-          type="dinner"
-          recipeName={dinner.name}
-          prepTime={dinner.prepTime}
+          slot="dinner"
+          recipeName={meals.dinner.name}
+          prepTime={meals.dinner.prepTime}
           generating={generating === 'dinner'}
+          canGenerate={true}
           onView={() => onViewRecipe("dinner")}
           onReplace={() => onReplaceRecipe("dinner")}
           onAddToList={() => onAddToList("dinner")}
         />
-        
-        {showLunchbox && lunchbox && (
-          <MealCard
-            type="lunchbox"
-            recipeName={lunchbox.name}
-            prepTime={lunchbox.prepTime}
-            generating={generating === 'lunchbox'}
-            onView={() => onViewRecipe("lunchbox")}
-            onReplace={() => onReplaceRecipe("lunchbox")}
-            onAddToList={() => onAddToList("lunchbox")}
-          />
-        )}
       </div>
     </div>
   );

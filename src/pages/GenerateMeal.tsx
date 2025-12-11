@@ -3,11 +3,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Cookie, Utensils, Sandwich, Sparkles, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Coffee, Utensils, Cookie, Moon, Sparkles, Save, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-type MealType = "snack" | "dinner" | "lunchbox";
+import { MealSlot, MEAL_LABELS, MEAL_ORDER } from "@/lib/meals";
 
 export default function GenerateMeal() {
   const navigate = useNavigate();
@@ -15,24 +14,25 @@ export default function GenerateMeal() {
   const [searchParams] = useSearchParams();
   const childId = searchParams.get("childId");
   
-  const [selectedType, setSelectedType] = useState<MealType | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<MealSlot | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generatedRecipe, setGeneratedRecipe] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
-  const mealTypes = [
-    { type: "snack" as MealType, label: "Goûter", icon: Cookie, color: "bg-pastel-yellow/30 hover:bg-pastel-yellow/50" },
-    { type: "dinner" as MealType, label: "Repas du soir", icon: Utensils, color: "bg-primary/20 hover:bg-primary/30" },
-    { type: "lunchbox" as MealType, label: "Lunchbox", icon: Sandwich, color: "bg-pastel-green/30 hover:bg-pastel-green/50" },
+  const mealSlots = [
+    { slot: "breakfast" as MealSlot, icon: Coffee, color: "bg-amber-100/50 hover:bg-amber-100" },
+    { slot: "lunch" as MealSlot, icon: Utensils, color: "bg-emerald-100/50 hover:bg-emerald-100" },
+    { slot: "snack" as MealSlot, icon: Cookie, color: "bg-pastel-yellow/30 hover:bg-pastel-yellow/50" },
+    { slot: "dinner" as MealSlot, icon: Moon, color: "bg-primary/20 hover:bg-primary/30" },
   ];
 
-  const handleGenerate = async (type: MealType) => {
+  const handleGenerate = async (slot: MealSlot) => {
     if (!session?.user?.id || !childId) {
       toast.error("Veuillez sélectionner un enfant");
       return;
     }
 
-    setSelectedType(type);
+    setSelectedSlot(slot);
     setGenerating(true);
     setGeneratedRecipe(null);
 
@@ -40,7 +40,7 @@ export default function GenerateMeal() {
       const { data, error } = await supabase.functions.invoke("generate-daily-meal", {
         body: {
           childId,
-          mealType: type,
+          mealType: slot,
           date: new Date().toISOString().split("T")[0],
         },
       });
@@ -68,7 +68,7 @@ export default function GenerateMeal() {
         recipe_id: generatedRecipe.id,
         child_id: childId,
         date: today,
-        meal_time: selectedType || "dinner",
+        meal_time: selectedSlot || "dinner",
       });
 
       if (error) throw error;
@@ -92,27 +92,27 @@ export default function GenerateMeal() {
           <div>
             <h1 className="text-xl font-bold">Génération de recette</h1>
             <p className="text-sm text-muted-foreground">
-              Choisissez le type de repas ou laissez l'IA proposer une suggestion
+              Choisissez le type de repas à générer
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3">
-          {mealTypes.map((meal) => {
+          {mealSlots.map((meal) => {
             const Icon = meal.icon;
             return (
               <Button
-                key={meal.type}
+                key={meal.slot}
                 variant="outline"
                 disabled={generating}
-                onClick={() => handleGenerate(meal.type)}
+                onClick={() => handleGenerate(meal.slot)}
                 className={`h-16 justify-start gap-4 ${meal.color} ${
-                  selectedType === meal.type ? "ring-2 ring-primary" : ""
+                  selectedSlot === meal.slot ? "ring-2 ring-primary" : ""
                 }`}
               >
                 <Icon className="w-6 h-6" />
-                <span className="font-semibold">Générer un {meal.label.toLowerCase()}</span>
-                {generating && selectedType === meal.type && (
+                <span className="font-semibold">Générer un {MEAL_LABELS[meal.slot].toLowerCase()}</span>
+                {generating && selectedSlot === meal.slot && (
                   <Loader2 className="w-5 h-5 ml-auto animate-spin" />
                 )}
               </Button>
