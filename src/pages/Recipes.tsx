@@ -4,12 +4,12 @@ import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, Plus, Coffee, Utensils, Cookie, Moon, Clock, ChefHat, Heart } from "lucide-react";
+import { ArrowLeft, Search, Plus, ChefHat, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/components/ui/use-toast";
-import { MealSlot, MEAL_LABELS } from "@/lib/meals";
-
-type FilterType = "all" | MealSlot | "favorites";
+import { toast } from "sonner";
+import { RecipeFilters, FilterType } from "@/components/recipes/RecipeFilters";
+import { RecipeCard } from "@/components/recipes/RecipeCard";
+import { AddRecipeDialog } from "@/components/recipes/AddRecipeDialog";
 
 interface Recipe {
   id: string;
@@ -17,39 +17,58 @@ interface Recipe {
   meal_type: string;
   preparation_time: number;
   difficulty: string;
+  ingredients?: any[];
 }
-
-const MEAL_ICONS: Record<MealSlot, typeof Coffee> = {
-  breakfast: Coffee,
-  lunch: Utensils,
-  snack: Cookie,
-  dinner: Moon,
-};
 
 export default function Recipes() {
   const navigate = useNavigate();
   const session = useSession();
-  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showLunchbox, setShowLunchbox] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
+  // Check if any child has special diet or school trips
   useEffect(() => {
-    const fetchData = async () => {
+    const checkLunchboxEligibility = async () => {
       if (!session?.user?.id) return;
-      
-      // Fetch recipes
-      let query = supabase
-        .from("recipes")
-        .select("id, name, meal_type, preparation_time, difficulty")
+
+      const { data: children } = await supabase
+        .from("children_profiles")
+        .select("regime_special, sortie_scolaire_dates")
         .eq("profile_id", session.user.id);
 
+      if (children) {
+        const hasSpecialChild = children.some(child => {
+          const hasSpecialDiet = child.regime_special === true;
+          const hasSchoolTrips = Array.isArray(child.sortie_scolaire_dates) && 
+            child.sortie_scolaire_dates.length > 0;
+          return hasSpecialDiet || hasSchoolTrips;
+        });
+        setShowLunchbox(hasSpecialChild);
+      }
+    };
+
+    checkLunchboxEligibility();
+  }, [session?.user?.id]);
+
+  const fetchRecipes = async () => {
+    if (!session?.user?.id) return;
+    setLoading(true);
+
+    try {
+      let query = supabase
+        .from("recipes")
+        .select("id, name, meal_type, preparation_time, difficulty, ingredients")
+        .eq("profile_id", session.user.id);
+
+      // Apply meal type filter
       if (filter !== "all" && filter !== "favorites") {
-        // Handle legacy lunchbox type
-        if (filter === "lunch") {
-          query = query.or("meal_type.eq.lunch,meal_type.eq.lunchbox");
+        if (filter === "lunchbox") {
+          query = query.or("meal_type.eq.lunchbox,meal_type.eq.lunchbox_special,meal_type.eq.lunchbox_trip");
         } else {
           query = query.eq("meal_type", filter);
         }
@@ -57,22 +76,39 @@ export default function Recipes() {
 
       const { data: recipesData, error: recipesError } = await query.order("created_at", { ascending: false });
       
-      // Fetch favorites
-      const { data: favoritesData, error: favoritesError } = await supabase
-        .from("recipe_favorites")
-        .select("recipe_id")
-        .eq("profile_id", session.user.id);
-
-      if (!recipesError && recipesData) {
-        setRecipes(recipesData);
-      }
-      if (!favoritesError && favoritesData) {
-        setFavoriteIds(favoritesData.map(f => f.recipe_id).filter(Boolean) as string[]);
-      }
+      if (recipesError) throw recipesError;
+      
+      // Parse ingredients if stringified
+      const parsedRecipes = (recipesData || []).map(r => ({
+        ...r,
+        ingredients: typeof r.ingredients === "string" ? JSON.parse(r.ingredients) : r.ingredients
+      }));
+      
+      setRecipes(parsedRecipes);
+    } catch (error) {
+      console.error("Error fetching recipes:", error);
+      toast.error("Erreur lors du chargement des recettes");
+    } finally {
       setLoading(false);
-    };
+    }
+  };
 
-    fetchData();
+  const fetchFavorites = async () => {
+    if (!session?.user?.id) return;
+
+    const { data: favoritesData } = await supabase
+      .from("recipe_favorites")
+      .select("recipe_id")
+      .eq("profile_id", session.user.id);
+
+    if (favoritesData) {
+      setFavoriteIds(favoritesData.map(f => f.recipe_id).filter(Boolean) as string[]);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecipes();
+    fetchFavorites();
   }, [session?.user?.id, filter]);
 
   const toggleFavorite = async (recipeId: string, e: React.MouseEvent) => {
@@ -81,38 +117,29 @@ export default function Recipes() {
 
     const isFavorite = favoriteIds.includes(recipeId);
 
-    if (isFavorite) {
-      const { error } = await supabase
-        .from("recipe_favorites")
-        .delete()
-        .eq("recipe_id", recipeId)
-        .eq("profile_id", session.user.id);
+    try {
+      if (isFavorite) {
+        await supabase
+          .from("recipe_favorites")
+          .delete()
+          .eq("recipe_id", recipeId)
+          .eq("profile_id", session.user.id);
 
-      if (!error) {
         setFavoriteIds(prev => prev.filter(id => id !== recipeId));
-        toast({ title: "Retiré des favoris" });
-      }
-    } else {
-      const { error } = await supabase
-        .from("recipe_favorites")
-        .insert({ recipe_id: recipeId, profile_id: session.user.id });
+        toast.success("Retiré des favoris");
+      } else {
+        await supabase
+          .from("recipe_favorites")
+          .insert({ recipe_id: recipeId, profile_id: session.user.id });
 
-      if (!error) {
         setFavoriteIds(prev => [...prev, recipeId]);
-        toast({ title: "Ajouté aux favoris" });
+        toast.success("Ajouté aux favoris");
       }
+    } catch (error) {
+      console.error("Error toggling favorite:", error);
+      toast.error("Une erreur est survenue");
     }
   };
-
-  // Filtres avec les 4 types de repas
-  const filters: { type: FilterType; label: string; icon: typeof ChefHat }[] = [
-    { type: "all", label: "Tous", icon: ChefHat },
-    { type: "favorites", label: "Favoris", icon: Heart },
-    { type: "breakfast", label: MEAL_LABELS.breakfast, icon: Coffee },
-    { type: "lunch", label: MEAL_LABELS.lunch, icon: Utensils },
-    { type: "snack", label: MEAL_LABELS.snack, icon: Cookie },
-    { type: "dinner", label: MEAL_LABELS.dinner, icon: Moon },
-  ];
 
   const filteredRecipes = recipes.filter(recipe => {
     const matchesSearch = recipe.name.toLowerCase().includes(search.toLowerCase());
@@ -120,21 +147,10 @@ export default function Recipes() {
     return matchesSearch && matchesFavorites;
   });
 
-  const getMealTypeIcon = (type: string) => {
-    // Handle legacy lunchbox type
-    if (type === "lunchbox") return Utensils;
-    return MEAL_ICONS[type as MealSlot] || Utensils;
-  };
-
-  const getMealTypeLabel = (type: string) => {
-    // Handle legacy lunchbox type
-    if (type === "lunchbox") return "Déjeuner (Lunchbox)";
-    return MEAL_LABELS[type as MealSlot] || type;
-  };
-
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto space-y-4">
+        {/* Header */}
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
             <ArrowLeft className="w-5 h-5" />
@@ -142,15 +158,16 @@ export default function Recipes() {
           <div className="flex-1">
             <h1 className="text-xl font-bold">Toutes les recettes</h1>
             <p className="text-xs text-muted-foreground">
-              Petit-déjeuner, déjeuner, goûter et dîner
+              Gérez votre bibliothèque de recettes
             </p>
           </div>
-          <Button onClick={() => navigate("/generate-meal")}>
+          <Button onClick={() => setShowAddDialog(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Ajouter
           </Button>
         </div>
 
+        {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -161,77 +178,55 @@ export default function Recipes() {
           />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {filters.map((f) => {
-            const Icon = f.icon;
-            return (
-              <Button
-                key={f.type}
-                variant={filter === f.type ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilter(f.type)}
-                className="flex-shrink-0"
-              >
-                <Icon className={`w-4 h-4 mr-1 ${f.type === "favorites" && filter === "favorites" ? "fill-current" : ""}`} />
-                {f.label}
-              </Button>
-            );
-          })}
-        </div>
+        {/* Filters */}
+        <RecipeFilters 
+          filter={filter} 
+          setFilter={setFilter} 
+          showLunchbox={showLunchbox} 
+        />
 
+        {/* Recipe List */}
         {loading ? (
-          <div className="text-center py-8 text-muted-foreground">
-            Chargement...
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : filteredRecipes.length === 0 ? (
           <Card className="p-8 text-center">
             <ChefHat className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">
-              {filter === "favorites" ? "Aucun favori" : search ? "Aucune recette trouvée" : "Aucune recette enregistrée"}
+              {filter === "favorites" 
+                ? "Aucun favori pour le moment" 
+                : search 
+                  ? "Aucune recette trouvée" 
+                  : "Aucune recette enregistrée"}
             </p>
-            <Button onClick={() => navigate("/generate-meal")}>
+            <Button onClick={() => setShowAddDialog(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Créer une recette
             </Button>
           </Card>
         ) : (
-          <div className="space-y-2">
-            {filteredRecipes.map((recipe) => {
-              const Icon = getMealTypeIcon(recipe.meal_type);
-              const isFavorite = favoriteIds.includes(recipe.id);
-              return (
-                <Card
-                  key={recipe.id}
-                  className="p-3 cursor-pointer hover:shadow-md transition-all"
-                  onClick={() => navigate(`/recipe/${recipe.id}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <Icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{recipe.name}</h3>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>{getMealTypeLabel(recipe.meal_type)}</span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {recipe.preparation_time} min
-                        </span>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => toggleFavorite(recipe.id, e)}
-                      className="shrink-0"
-                    >
-                      <Heart className={`w-5 h-5 ${isFavorite ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
-                    </Button>
-                  </div>
-                </Card>
-              );
-            })}
+          <div className="space-y-3">
+            {filteredRecipes.map((recipe) => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                isFavorite={favoriteIds.includes(recipe.id)}
+                onToggleFavorite={toggleFavorite}
+              />
+            ))}
           </div>
+        )}
+
+        {/* Add Recipe Dialog */}
+        {session?.user?.id && (
+          <AddRecipeDialog
+            open={showAddDialog}
+            onOpenChange={setShowAddDialog}
+            userId={session.user.id}
+            showLunchbox={showLunchbox}
+            onSuccess={fetchRecipes}
+          />
         )}
       </div>
     </div>
