@@ -349,7 +349,7 @@ export default function Planning() {
             userId={session.user.id}
             childId={selectedChild?.id || null}
             onSelectRecipe={handleSelectRecipe}
-            onGenerateRecipe={handleGenerateRecipe}
+            onNavigateToGenerate={handleGenerateRecipe}
           />
         )}
       </div>

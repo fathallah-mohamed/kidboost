@@ -25,7 +25,7 @@ interface AddRecipeDialogProps {
   userId: string;
   childId: string | null;
   onSelectRecipe: (recipe: Recipe) => void;
-  onGenerateRecipe: () => void;
+  onNavigateToGenerate: () => void;
 }
 
 export function AddRecipeDialog({
@@ -36,7 +36,7 @@ export function AddRecipeDialog({
   userId,
   childId,
   onSelectRecipe,
-  onGenerateRecipe,
+  onNavigateToGenerate,
 }: AddRecipeDialogProps) {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,7 +93,7 @@ export function AddRecipeDialog({
             variant="outline"
             className="w-full justify-start gap-2 border-primary/50 hover:bg-primary/5"
             onClick={() => {
-              onGenerateRecipe();
+              onNavigateToGenerate();
               onOpenChange(false);
             }}
           >
