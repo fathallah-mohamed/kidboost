@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { RecipeFilters, FilterType } from "@/components/recipes/RecipeFilters";
 import { RecipeCard } from "@/components/recipes/RecipeCard";
 import { AddRecipeDialog } from "@/components/recipes/AddRecipeDialog";
+import { GlobalChildSelector } from "@/components/common/GlobalChildSelector";
+import { useChild } from "@/contexts/ChildContext";
 
 interface Recipe {
   id: string;
@@ -23,6 +25,7 @@ interface Recipe {
 export default function Recipes() {
   const navigate = useNavigate();
   const session = useSession();
+  const { selectedChild } = useChild();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -31,29 +34,18 @@ export default function Recipes() {
   const [showLunchbox, setShowLunchbox] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
 
-  // Check if any child has special diet or school trips
+  // Check if selected child has special diet or school trips
   useEffect(() => {
-    const checkLunchboxEligibility = async () => {
-      if (!session?.user?.id) return;
+    if (!selectedChild) {
+      setShowLunchbox(false);
+      return;
+    }
 
-      const { data: children } = await supabase
-        .from("children_profiles")
-        .select("regime_special, sortie_scolaire_dates")
-        .eq("profile_id", session.user.id);
-
-      if (children) {
-        const hasSpecialChild = children.some(child => {
-          const hasSpecialDiet = child.regime_special === true;
-          const hasSchoolTrips = Array.isArray(child.sortie_scolaire_dates) && 
-            child.sortie_scolaire_dates.length > 0;
-          return hasSpecialDiet || hasSchoolTrips;
-        });
-        setShowLunchbox(hasSpecialChild);
-      }
-    };
-
-    checkLunchboxEligibility();
-  }, [session?.user?.id]);
+    const hasSpecialDiet = selectedChild.regime_special === true;
+    const hasSchoolTrips = Array.isArray(selectedChild.sortie_scolaire_dates) && 
+      selectedChild.sortie_scolaire_dates.length > 0;
+    setShowLunchbox(hasSpecialDiet || hasSchoolTrips);
+  }, [selectedChild]);
 
   const fetchRecipes = async () => {
     if (!session?.user?.id) return;
@@ -166,6 +158,14 @@ export default function Recipes() {
             Ajouter
           </Button>
         </div>
+
+        {/* Child Selector for planning context */}
+        <Card className="p-3 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Ajouter au planning pour :</span>
+            <GlobalChildSelector variant="compact" showLabel={false} />
+          </div>
+        </Card>
 
         {/* Search */}
         <div className="relative">

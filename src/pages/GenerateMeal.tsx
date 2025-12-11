@@ -3,29 +3,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Settings, Calendar, AlertCircle } from "lucide-react";
+import { ArrowLeft, Settings, Calendar, AlertCircle, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, isSameDay } from "date-fns";
 import { fr } from "date-fns/locale";
 import { MealOptionCard, MealOptionType, MEAL_OPTIONS } from "@/components/generate-meal/MealOptionCard";
 import { GenerateMealDialog } from "@/components/generate-meal/GenerateMealDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
-interface Child {
-  id: string;
-  name: string;
-  birth_date: string;
-  regime_special: boolean;
-  dejeuner_habituel: string;
-  sortie_scolaire_dates: string[];
-  allergies: string[];
-  restrictions_alimentaires: string[];
-  aliments_interdits: string[];
-  aliments_preferes: string[];
-  preferences_gout: string[];
-  available_time: number;
-  materiel_disponible: string[];
-}
+import { GlobalChildSelector } from "@/components/common/GlobalChildSelector";
+import { useChild, calculateAge } from "@/contexts/ChildContext";
 
 interface ParentPreferences {
   style_cuisine: string[];
@@ -38,13 +24,12 @@ export default function GenerateMeal() {
   const navigate = useNavigate();
   const session = useSession();
   const [searchParams] = useSearchParams();
+  const { selectedChild } = useChild();
   
-  const childIdParam = searchParams.get("childId");
   const dateParam = searchParams.get("date") || format(new Date(), "yyyy-MM-dd");
   const mealTypeParam = searchParams.get("mealType");
   const fromParam = searchParams.get("from"); // 'planning' or 'dashboard'
   
-  const [child, setChild] = useState<Child | null>(null);
   const [parentPreferences, setParentPreferences] = useState<ParentPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -64,23 +49,12 @@ export default function GenerateMeal() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!session?.user?.id || !childIdParam) {
+      if (!session?.user?.id) {
         setLoading(false);
         return;
       }
 
       try {
-        // Fetch child profile
-        const { data: childData, error: childError } = await supabase
-          .from("children_profiles")
-          .select("*")
-          .eq("id", childIdParam)
-          .eq("profile_id", session.user.id)
-          .single();
-
-        if (childError) throw childError;
-        setChild(childData as Child);
-
         // Fetch parent preferences
         const { data: profileData } = await supabase
           .from("profiles")
@@ -99,26 +73,26 @@ export default function GenerateMeal() {
     };
 
     fetchData();
-  }, [session?.user?.id, childIdParam]);
+  }, [session?.user?.id]);
 
   // Auto-open dialog if mealType is provided in URL
   useEffect(() => {
-    if (mealTypeParam && child) {
+    if (mealTypeParam && selectedChild) {
       const validTypes: MealOptionType[] = ['breakfast', 'lunch', 'snack', 'dinner', 'lunchbox_special', 'lunchbox_trip'];
       if (validTypes.includes(mealTypeParam as MealOptionType)) {
         setSelectedMealType(mealTypeParam as MealOptionType);
         setDialogOpen(true);
       }
     }
-  }, [mealTypeParam, child]);
+  }, [mealTypeParam, selectedChild]);
 
   // Calculate which meals are available based on child's config
   const availableMeals = useMemo((): MealOptionType[] => {
-    if (!child) return [];
+    if (!selectedChild) return [];
 
     const meals: MealOptionType[] = ['breakfast', 'snack', 'dinner'];
     
-    const schoolTripDates = child.sortie_scolaire_dates || [];
+    const schoolTripDates = selectedChild.sortie_scolaire_dates || [];
     const hasSchoolTripToday = schoolTripDates.some((tripDate) => {
       try {
         return isSameDay(parseISO(tripDate), selectedDate);
@@ -127,8 +101,8 @@ export default function GenerateMeal() {
       }
     });
 
-    const hasSpecialDiet = child.regime_special || false;
-    const eatsAtCanteen = child.dejeuner_habituel === "cantine";
+    const hasSpecialDiet = selectedChild.regime_special || false;
+    const eatsAtCanteen = selectedChild.dejeuner_habituel === "cantine";
 
     // Logic for lunch/lunchbox
     if (hasSchoolTripToday) {
@@ -144,7 +118,7 @@ export default function GenerateMeal() {
     // If eats at canteen and no special conditions -> no lunch option (handled by canteen)
 
     return meals;
-  }, [child, selectedDate]);
+  }, [selectedChild, selectedDate]);
 
   const handleMealClick = (mealType: MealOptionType) => {
     setSelectedMealType(mealType);
@@ -154,7 +128,7 @@ export default function GenerateMeal() {
   const handleSuccess = () => {
     // Navigate back based on origin
     if (fromParam === 'planning') {
-      navigate(`/planning?childId=${childIdParam}`);
+      navigate(`/planning`);
     } else {
       navigate('/dashboard');
     }
@@ -162,7 +136,7 @@ export default function GenerateMeal() {
 
   const handleBack = () => {
     if (fromParam === 'planning') {
-      navigate(`/planning?childId=${childIdParam}`);
+      navigate(`/planning`);
     } else {
       navigate('/dashboard');
     }
@@ -176,7 +150,7 @@ export default function GenerateMeal() {
     );
   }
 
-  if (!childIdParam || !child) {
+  if (!selectedChild) {
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-lg mx-auto space-y-6">
@@ -187,16 +161,10 @@ export default function GenerateMeal() {
             <h1 className="text-xl font-bold">Générer un repas</h1>
           </div>
 
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Aucun enfant sélectionné. Veuillez sélectionner un enfant depuis le dashboard ou le planning.
-            </AlertDescription>
-          </Alert>
-
-          <Button onClick={() => navigate("/dashboard")} className="w-full">
-            Retour au dashboard
-          </Button>
+          <Card className="p-4">
+            <p className="text-sm text-muted-foreground mb-3">Sélectionnez un enfant pour continuer :</p>
+            <GlobalChildSelector variant="default" />
+          </Card>
         </div>
       </div>
     );
@@ -204,9 +172,9 @@ export default function GenerateMeal() {
 
   // Check if it's a canteen day with no special conditions
   const isCanteenOnlyDay = 
-    child.dejeuner_habituel === "cantine" && 
-    !child.regime_special && 
-    !(child.sortie_scolaire_dates || []).some((d) => {
+    selectedChild.dejeuner_habituel === "cantine" && 
+    !selectedChild.regime_special && 
+    !(selectedChild.sortie_scolaire_dates || []).some((d) => {
       try { return isSameDay(parseISO(d), selectedDate); } catch { return false; }
     });
 
@@ -221,13 +189,23 @@ export default function GenerateMeal() {
             </Button>
             <div>
               <h1 className="text-xl font-bold">Générer un repas</h1>
-              <p className="text-sm text-muted-foreground">pour {child.name}</p>
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={() => navigate("/profile-settings")}>
             <Settings className="w-5 h-5" />
           </Button>
         </div>
+
+        {/* Global Child Selector */}
+        <Card className="p-4 bg-primary/5 border-primary/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">Générer pour :</span>
+            </div>
+            <GlobalChildSelector variant="compact" showLabel={false} />
+          </div>
+        </Card>
 
         {/* Date display */}
         <Card className="p-4 bg-muted/30">
@@ -247,7 +225,7 @@ export default function GenerateMeal() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {child.name} mange à la cantine ce jour. Seuls le petit-déjeuner, le goûter et le dîner peuvent être planifiés.
+              {selectedChild.name} mange à la cantine ce jour. Seuls le petit-déjeuner, le goûter et le dîner peuvent être planifiés.
             </AlertDescription>
           </Alert>
         )}
@@ -269,17 +247,17 @@ export default function GenerateMeal() {
         </div>
 
         {/* Info about child preferences */}
-        {(child.allergies?.length > 0 || child.restrictions_alimentaires?.length > 0) && (
+        {(selectedChild.allergies?.length > 0 || selectedChild.restrictions_alimentaires?.length > 0) && (
           <Card className="p-4 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-              ⚠️ Restrictions actives pour {child.name}
+              ⚠️ Restrictions actives pour {selectedChild.name}
             </p>
             <div className="mt-2 text-sm text-amber-600 dark:text-amber-400 space-y-1">
-              {child.allergies?.length > 0 && (
-                <p>Allergies : {child.allergies.join(", ")}</p>
+              {selectedChild.allergies?.length > 0 && (
+                <p>Allergies : {selectedChild.allergies.join(", ")}</p>
               )}
-              {child.restrictions_alimentaires?.length > 0 && (
-                <p>Restrictions : {child.restrictions_alimentaires.join(", ")}</p>
+              {selectedChild.restrictions_alimentaires?.length > 0 && (
+                <p>Restrictions : {selectedChild.restrictions_alimentaires.join(", ")}</p>
               )}
             </div>
           </Card>
@@ -294,20 +272,20 @@ export default function GenerateMeal() {
           mealType={selectedMealType}
           date={dateParam}
           userId={session.user.id}
-          childId={child.id}
-          childName={child.name}
+          childId={selectedChild.id}
+          childName={selectedChild.name}
           childProfile={{
-            allergies: child.allergies || [],
+            allergies: selectedChild.allergies || [],
             restrictions: [
-              ...(child.restrictions_alimentaires || []),
-              ...(child.aliments_interdits || []),
+              ...(selectedChild.restrictions_alimentaires || []),
+              ...(selectedChild.aliments_interdits || []),
             ],
             preferences: [
-              ...(child.aliments_preferes || []),
-              ...(child.preferences_gout || []),
+              ...(selectedChild.aliments_preferes || []),
+              ...(selectedChild.preferences_gout || []),
             ],
-            availableTime: child.available_time || 20,
-            equipment: child.materiel_disponible || [],
+            availableTime: selectedChild.available_time || 20,
+            equipment: selectedChild.materiel_disponible || [],
           }}
           parentPreferences={parentPreferences ? {
             style: parentPreferences.style_cuisine || [],
