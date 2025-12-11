@@ -1,7 +1,21 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, Eye, RefreshCw, Plus, Coffee, Utensils, Cookie, Moon, Sandwich, Loader2, Ban, Edit, School, Home, AlertTriangle } from "lucide-react";
+import { 
+  Clock, Eye, RefreshCw, Plus, Utensils, Moon, Sandwich, Loader2, 
+  Ban, Edit, School, Home, AlertTriangle, MoreHorizontal, Trash2, 
+  Replace, Sun, Apple, ChevronLeft, ChevronRight 
+} from "lucide-react";
 import { MealSlot, LunchType, MEAL_LABELS, LUNCH_CONFIGS } from "@/lib/meals";
+import { format, addDays, subDays } from "date-fns";
+import { fr } from "date-fns/locale";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface MealCardProps {
   slot: MealSlot;
@@ -16,12 +30,13 @@ interface MealCardProps {
   onAddToList: () => void;
   onEdit: () => void;
   onAddRecipe: () => void;
+  onDelete?: () => void;
 }
 
 const getMealConfig = (slot: MealSlot, lunchType?: LunchType) => {
-  const configs: Record<MealSlot, { icon: typeof Coffee; gradient: string; iconBg: string; accentColor: string }> = {
+  const configs: Record<MealSlot, { icon: typeof Sun; gradient: string; iconBg: string; accentColor: string }> = {
     breakfast: {
-      icon: Coffee,
+      icon: Sun,
       gradient: "from-amber-100/60 to-amber-50/30 dark:from-amber-900/30 dark:to-amber-950/20",
       iconBg: "bg-amber-200/70 dark:bg-amber-800/50",
       accentColor: "text-amber-700 dark:text-amber-400",
@@ -33,7 +48,7 @@ const getMealConfig = (slot: MealSlot, lunchType?: LunchType) => {
       accentColor: "text-emerald-700 dark:text-emerald-400",
     },
     snack: {
-      icon: Cookie,
+      icon: Apple,
       gradient: "from-orange-100/60 to-orange-50/30 dark:from-orange-900/30 dark:to-orange-950/20",
       iconBg: "bg-orange-200/70 dark:bg-orange-800/50",
       accentColor: "text-orange-700 dark:text-orange-400",
@@ -96,23 +111,40 @@ const MealCard = ({
   onAddToList,
   onEdit,
   onAddRecipe,
+  onDelete,
 }: MealCardProps) => {
   const config = getMealConfig(slot, lunchType);
   const Icon = slot === 'lunch' && lunchType ? getLunchIcon(lunchType) : config.icon;
   const label = getLabel(slot, lunchType);
   const generateLabel = getGenerateButtonLabel(slot, lunchType);
+  const isSpecialDiet = slot === 'lunch' && lunchType === 'special_diet';
+  const isSchoolTrip = slot === 'lunch' && lunchType === 'school_trip';
 
   return (
-    <Card className={`px-3 py-2.5 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all border-l-4 border-l-transparent hover:border-l-current ${config.accentColor}`}>
+    <Card className={`px-3 py-3 bg-gradient-to-br ${config.gradient} hover:shadow-md transition-all border-b border-border/30`}>
       <div className="flex items-center gap-3">
-        <div className={`p-1.5 ${config.iconBg} rounded-lg`}>
-          <Icon className={`w-4 h-4 ${config.accentColor}`} />
+        <div className={`p-2 ${config.iconBg} rounded-lg`}>
+          <Icon className={`w-5 h-5 ${config.accentColor}`} />
         </div>
         
         <div className="flex-1 min-w-0">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block leading-tight">
+          <span className="text-xs font-bold text-foreground block leading-tight">
             {label}
           </span>
+          
+          {/* Label régime spécial */}
+          {isSpecialDiet && (
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+              Régime alimentaire spécial
+            </span>
+          )}
+          
+          {/* Label sortie scolaire */}
+          {isSchoolTrip && (
+            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+              Sortie scolaire
+            </span>
+          )}
           
           {generating ? (
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -127,7 +159,7 @@ const MealCard = ({
             </div>
           ) : recipeName ? (
             <div className="space-y-0.5 mt-0.5">
-              <h4 className="font-bold text-sm truncate">{recipeName}</h4>
+              <h4 className="font-semibold text-sm truncate">{recipeName}</h4>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 {prepTime && (
                   <span className="flex items-center gap-0.5">
@@ -147,20 +179,41 @@ const MealCard = ({
 
         {!generating && canGenerate && (
           recipeName ? (
-            <div className="flex gap-1">
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onView} title="Voir">
-                <Eye className="w-3.5 h-3.5" />
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onReplace} title="Régénérer">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onEdit} title="Modifier">
-                <Edit className="w-3.5 h-3.5" />
-              </Button>
-              <Button size="sm" variant="secondary" className="h-7 w-7 p-0" onClick={onAddToList} title="Ajouter aux courses">
-                <Plus className="w-3.5 h-3.5" />
-              </Button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-background w-48">
+                <DropdownMenuItem onClick={onView} className="cursor-pointer">
+                  <Eye className="w-4 h-4 mr-2" />
+                  Voir recette
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onEdit} className="cursor-pointer">
+                  <Edit className="w-4 h-4 mr-2" />
+                  Modifier
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onReplace} className="cursor-pointer">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Régénérer
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onAddRecipe} className="cursor-pointer">
+                  <Replace className="w-4 h-4 mr-2" />
+                  Remplacer
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onAddToList} className="cursor-pointer">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Ajouter aux courses
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onDelete} className="cursor-pointer text-destructive">
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Supprimer
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <div className="flex gap-1">
               <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={onAddRecipe}>
@@ -200,34 +253,84 @@ interface TodayMealsProps {
     dinner: MealData;
   };
   lunchType: LunchType;
+  hasSpecialDiet?: boolean;
   generating?: MealSlot | null;
+  selectedDate: Date;
+  onDateChange: (date: Date) => void;
   onViewRecipe: (slot: MealSlot) => void;
   onReplaceRecipe: (slot: MealSlot) => void;
   onAddToList: (slot: MealSlot) => void;
   onEditRecipe: (slot: MealSlot) => void;
   onAddRecipe: (slot: MealSlot) => void;
+  onDeleteRecipe?: (slot: MealSlot) => void;
 }
 
 export const TodayMeals = ({
   childName,
   meals,
   lunchType,
+  hasSpecialDiet,
   generating,
+  selectedDate,
+  onDateChange,
   onViewRecipe,
   onReplaceRecipe,
   onAddToList,
   onEditRecipe,
   onAddRecipe,
+  onDeleteRecipe,
 }: TodayMealsProps) => {
   const canGenerateLunch = LUNCH_CONFIGS[lunchType].canGenerate;
+  
+  const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+  const formattedDate = format(selectedDate, "EEEE d MMMM", { locale: fr });
+  const capitalizedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+
+  const handlePreviousDay = () => {
+    onDateChange(subDays(selectedDate, 1));
+  };
+
+  const handleNextDay = () => {
+    onDateChange(addDays(selectedDate, 1));
+  };
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold">
-          Aujourd'hui pour {childName} 🍽️
-        </h2>
-        <span className="text-[10px] text-muted-foreground">4 repas</span>
+      <h2 className="text-base font-bold">
+        {isToday ? `Aujourd'hui pour ${childName}` : `${capitalizedDate} pour ${childName}`} 🍽️
+      </h2>
+      
+      {/* Indicateur régime spécial */}
+      {hasSpecialDiet && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-100/80 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          <span className="text-xs text-amber-700 dark:text-amber-300">
+            🔔 Régime alimentaire spécial détecté : les repas proposés sont adaptés.
+          </span>
+        </div>
+      )}
+
+      {/* Day Selector */}
+      <div className="flex items-center justify-center gap-2 py-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={handlePreviousDay}
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="text-sm font-medium min-w-[160px] text-center">
+          {isToday ? `Aujourd'hui (${format(selectedDate, "EEEE d", { locale: fr })})` : capitalizedDate}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={handleNextDay}
+        >
+          <ChevronRight className="w-4 h-4" />
+        </Button>
       </div>
       
       <div className="space-y-2">
@@ -243,6 +346,7 @@ export const TodayMeals = ({
           onAddToList={() => onAddToList("breakfast")}
           onEdit={() => onEditRecipe("breakfast")}
           onAddRecipe={() => onAddRecipe("breakfast")}
+          onDelete={() => onDeleteRecipe?.("breakfast")}
         />
 
         <MealCard
@@ -258,6 +362,7 @@ export const TodayMeals = ({
           onAddToList={() => onAddToList("lunch")}
           onEdit={() => onEditRecipe("lunch")}
           onAddRecipe={() => onAddRecipe("lunch")}
+          onDelete={() => onDeleteRecipe?.("lunch")}
         />
         
         <MealCard
@@ -272,6 +377,7 @@ export const TodayMeals = ({
           onAddToList={() => onAddToList("snack")}
           onEdit={() => onEditRecipe("snack")}
           onAddRecipe={() => onAddRecipe("snack")}
+          onDelete={() => onDeleteRecipe?.("snack")}
         />
         
         <MealCard
@@ -286,6 +392,7 @@ export const TodayMeals = ({
           onAddToList={() => onAddToList("dinner")}
           onEdit={() => onEditRecipe("dinner")}
           onAddRecipe={() => onAddRecipe("dinner")}
+          onDelete={() => onDeleteRecipe?.("dinner")}
         />
       </div>
     </div>

@@ -14,7 +14,7 @@ import { QuickStartGuide } from "./QuickStartGuide";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MealSlot, LunchType, determineLunchType } from "@/lib/meals";
-import { Users, Settings, ChevronDown } from "lucide-react";
+import { Users, Settings, User } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { format } from "date-fns";
 
 interface Child {
   id: string;
@@ -58,6 +59,7 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   const [children, setChildren] = useState<Child[]>([]);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [showChildSelector, setShowChildSelector] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [dashboardData, setDashboardData] = useState<{
     todayMeals: {
       breakfast: MealData;
@@ -73,6 +75,7 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
       daysPlanned: number;
       totalDays: number;
       shoppingListReady: boolean;
+      mealsToplan: number;
     };
     nutrition: { vegetables: number; proteins: number; starches: number; dairy: number };
   }>({
@@ -90,12 +93,16 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
       daysPlanned: 0,
       totalDays: 7,
       shoppingListReady: false,
+      mealsToplan: 28,
     },
     nutrition: { vegetables: 25, proteins: 25, starches: 30, dairy: 20 },
   });
 
   const { generateQuickPlan, loading: quickPlanLoading } = useQuickPlan(userId);
   const { fetchDashboardData, generateMeal, generating } = useDashboardData(userId);
+
+  // Check if child has special diet (allergies)
+  const hasSpecialDiet = selectedChild?.allergies && selectedChild.allergies.filter(a => a && a.trim() !== '').length > 0;
 
   // Fetch user and children on mount
   useEffect(() => {
@@ -119,13 +126,24 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     fetchInitialData();
   }, [userId]);
 
-  // Fetch dashboard data when child changes
+  // Fetch dashboard data when child or date changes
   const refreshDashboard = useCallback(async () => {
     if (!selectedChild) return;
     
-    const data = await fetchDashboardData(selectedChild);
-    setDashboardData(data);
-  }, [selectedChild, fetchDashboardData]);
+    const data = await fetchDashboardData(selectedChild, format(selectedDate, "yyyy-MM-dd"));
+    
+    // Calculate meals to plan (4 meals per day * 7 days - planned meals)
+    const plannedMealsCount = data.stats.recipesReady;
+    const totalMealsWeek = 28; // 4 meals * 7 days
+    
+    setDashboardData({
+      ...data,
+      stats: {
+        ...data.stats,
+        mealsToplan: totalMealsWeek - plannedMealsCount,
+      },
+    });
+  }, [selectedChild, selectedDate, fetchDashboardData]);
 
   useEffect(() => {
     refreshDashboard();
@@ -140,6 +158,7 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     const msUntilMidnight = tomorrow.getTime() - now.getTime();
 
     const timer = setTimeout(() => {
+      setSelectedDate(new Date());
       refreshDashboard();
     }, msUntilMidnight);
 
@@ -196,7 +215,7 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   const handleReplaceRecipe = async (slot: MealSlot) => {
     if (!selectedChild) return;
     
-    const newMeal = await generateMeal(selectedChild, slot);
+    const newMeal = await generateMeal(selectedChild, slot, format(selectedDate, "yyyy-MM-dd"));
     
     if (newMeal) {
       setDashboardData(prev => ({
@@ -207,6 +226,30 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
         },
       }));
     }
+  };
+
+  const handleDeleteRecipe = async (slot: MealSlot) => {
+    if (!selectedChild) return;
+    
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    
+    // Delete from meal_plans
+    await supabase
+      .from('meal_plans')
+      .delete()
+      .eq('profile_id', userId)
+      .eq('child_id', selectedChild.id)
+      .eq('date', dateStr)
+      .eq('meal_time', slot);
+
+    // Update local state
+    setDashboardData(prev => ({
+      ...prev,
+      todayMeals: {
+        ...prev.todayMeals,
+        [slot]: { name: null },
+      },
+    }));
   };
 
   const handleAddToList = async (slot: MealSlot) => {
@@ -257,6 +300,10 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     }
   };
 
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
+  };
+
   // Show QuickStartGuide if no children
   if (children.length === 0) {
     return (
@@ -287,9 +334,9 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
           </p>
         </div>
 
-        {/* Child Selector Dropdown */}
+        {/* Child Selector Dropdown + Voir fiche */}
         {children.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-muted-foreground">Enfant :</span>
             <Select
               value={selectedChild?.id || ""}
@@ -306,16 +353,20 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
                 ))}
               </SelectContent>
             </Select>
+            
+            {/* Voir fiche enfant button */}
+            {selectedChild && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={() => navigate(`/profile-settings?childId=${selectedChild.id}`)}
+              >
+                <User className="w-3.5 h-3.5" />
+                Voir fiche enfant
+              </Button>
+            )}
           </div>
-        )}
-
-        {selectedChild && (
-          <ChildProfileBadge
-            childName={selectedChild.name}
-            childAge={calculateAge(selectedChild.birth_date)}
-            allergies={(selectedChild.allergies || []).filter(a => a && a.trim() !== '')}
-            onChangeChild={() => setShowChildSelector(true)}
-          />
         )}
       </div>
 
@@ -325,12 +376,16 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
           childName={selectedChild.name}
           meals={dashboardData.todayMeals}
           lunchType={dashboardData.lunchType}
+          hasSpecialDiet={hasSpecialDiet}
           generating={generating}
+          selectedDate={selectedDate}
+          onDateChange={handleDateChange}
           onViewRecipe={handleViewRecipe}
           onReplaceRecipe={handleReplaceRecipe}
           onAddToList={handleAddToList}
           onEditRecipe={handleEditRecipe}
           onAddRecipe={handleAddRecipe}
+          onDeleteRecipe={handleDeleteRecipe}
         />
       )}
 
@@ -368,6 +423,7 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
         daysPlanned={dashboardData.stats.daysPlanned}
         totalDays={dashboardData.stats.totalDays}
         shoppingListReady={dashboardData.stats.shoppingListReady}
+        mealsToplan={dashboardData.stats.mealsToplan}
         onAction={onSectionChange}
       />
 

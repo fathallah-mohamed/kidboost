@@ -68,7 +68,7 @@ export const MiniCalendar = ({ plannedDays, onDayClick, onViewFull }: MiniCalend
                 ? "bg-primary text-primary-foreground ring-2 ring-primary/30"
                 : day.isPlanned
                   ? "bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-900/60"
-                  : "bg-muted/60 hover:bg-muted"
+                  : "bg-red-100/50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30"
               }`}
           >
             <span className="text-[8px] font-medium uppercase leading-none opacity-70">{day.dayName}</span>
@@ -77,23 +77,22 @@ export const MiniCalendar = ({ plannedDays, onDayClick, onViewFull }: MiniCalend
               className={`w-2 h-2 rounded-full mt-0.5 ${
                 day.isPlanned 
                   ? "bg-emerald-500 dark:bg-emerald-400" 
-                  : "bg-muted-foreground/30"
+                  : "bg-red-400 dark:bg-red-500"
               }`}
             />
           </button>
         ))}
       </div>
 
-      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-border/40">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-muted-foreground">Planifié ({plannedCount})</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-            <span className="text-muted-foreground">À planifier ({toplanCount})</span>
-          </div>
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-4 text-[10px] pt-1 border-t border-border/40">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+          <span className="text-muted-foreground">Planifié</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+          <span className="text-muted-foreground">À planifier</span>
         </div>
       </div>
     </Card>
