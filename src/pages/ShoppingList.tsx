@@ -179,7 +179,12 @@ export default function ShoppingList() {
         .maybeSingle();
       
       if (!error && data?.items && Array.isArray(data.items)) {
-        setItems(data.items as unknown as ShoppingItem[]);
+        // Ensure all items have recipeNames array (for backward compatibility)
+        const normalizedItems = (data.items as unknown as ShoppingItem[]).map(item => ({
+          ...item,
+          recipeNames: item.recipeNames || []
+        }));
+        setItems(normalizedItems);
         if (data.updated_at) {
           setLastGeneratedAt(new Date(data.updated_at));
         }
@@ -609,7 +614,7 @@ export default function ShoppingList() {
                               </span>
                             )}
                           </div>
-                          {item.recipeNames.length > 0 && (
+                          {item.recipeNames && item.recipeNames.length > 0 && (
                             <p className="text-xs text-muted-foreground truncate mt-0.5">
                               <ChefHat className="w-3 h-3 inline mr-1" />
                               {item.recipeNames.join(", ")}
