@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Settings, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, endOfWeek, addWeeks, addDays, isSameDay, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import { MealSlot, LunchType, determineLunchType, ChildMealConfig } from "@/lib/meals";
+import { MealSlot, LunchType, determineLunchType, ChildMealConfig, MEAL_ORDER } from "@/lib/meals";
 import { WeeklyPlanningGrid } from "@/components/planning/WeeklyPlanningGrid";
 import { ChildSelector } from "@/components/planning/ChildSelector";
 import { AddRecipeDialog } from "@/components/planning/AddRecipeDialog";
+import { PlanningSummary } from "@/components/planning/PlanningSummary";
 import { toast } from "sonner";
 
 interface PlannedMeal {
@@ -58,7 +59,7 @@ export default function Planning() {
   const [selectedSlot, setSelectedSlot] = useState<MealSlot | null>(null);
 
   // Generate week days
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const date = addDays(currentWeekStart, i);
     return {
       date,
@@ -67,13 +68,13 @@ export default function Planning() {
       dayNumber: format(date, "d"),
       isToday: isSameDay(date, new Date()),
     };
-  });
+  }), [currentWeekStart]);
 
   const weekEnd = endOfWeek(currentWeekStart, { weekStartsOn: 1 });
   const weekLabel = `${format(currentWeekStart, "d MMM", { locale: fr })} au ${format(weekEnd, "d MMM yyyy", { locale: fr })}`;
 
   // Calculate lunch configs for each day
-  const calculateLunchConfigs = useCallback((): DayLunchConfig[] => {
+  const lunchConfigs = useMemo((): DayLunchConfig[] => {
     if (!selectedChild) return [];
 
     return weekDays.map((day) => {
@@ -111,7 +112,36 @@ export default function Planning() {
     });
   }, [selectedChild, weekDays]);
 
-  const lunchConfigs = calculateLunchConfigs();
+  // Calculate summary statistics
+  const summaryStats = useMemo(() => {
+    // Total possible meals = 7 days * 4 meals (but canteen meals don't count)
+    const canteenDays = lunchConfigs.filter(c => c.lunchType === 'canteen').length;
+    const totalMeals = 7 * 4 - canteenDays; // Subtract canteen lunches
+    
+    // Planned meals (excluding canteen)
+    const plannedCount = plannedMeals.filter(meal => {
+      const config = lunchConfigs.find(c => c.date === meal.date);
+      // Don't count if it's a canteen day lunch
+      if (meal.meal_time === 'lunch' && config?.lunchType === 'canteen') return false;
+      return true;
+    }).length;
+
+    // Lunchbox count (school trips + special diet)
+    const lunchboxCount = lunchConfigs.filter(
+      c => c.lunchType === 'school_trip' || c.lunchType === 'special_diet'
+    ).length;
+
+    // Home lunch count
+    const homeLunchCount = lunchConfigs.filter(c => c.lunchType === 'home').length;
+
+    return {
+      plannedMealsCount: plannedCount,
+      totalMealsCount: totalMeals,
+      lunchboxCount,
+      homeLunchCount,
+      canteenCount: canteenDays,
+    };
+  }, [plannedMeals, lunchConfigs]);
 
   // Fetch planned meals
   useEffect(() => {
@@ -173,6 +203,12 @@ export default function Planning() {
   };
 
   const handleEditRecipe = (date: string, slot: MealSlot, mealId: string) => {
+    setSelectedDate(date);
+    setSelectedSlot(slot);
+    setDialogOpen(true);
+  };
+
+  const handleReplaceRecipe = (date: string, slot: MealSlot, mealId: string) => {
     setSelectedDate(date);
     setSelectedSlot(slot);
     setDialogOpen(true);
@@ -247,6 +283,7 @@ export default function Planning() {
       }
 
       toast.success("Recette ajoutée au planning");
+      setDialogOpen(false);
     } catch (error) {
       console.error("Error adding recipe:", error);
       toast.error("Erreur lors de l'ajout de la recette");
@@ -254,8 +291,20 @@ export default function Planning() {
   };
 
   const handleGenerateRecipe = () => {
-    if (selectedChild && selectedSlot) {
-      navigate(`/generate-meal?childId=${selectedChild.id}&mealType=${selectedSlot}&date=${selectedDate}`);
+    if (selectedChild && selectedSlot && selectedDate) {
+      // Determine the correct meal type for generation
+      const lunchConfig = lunchConfigs.find(c => c.date === selectedDate);
+      let mealType = selectedSlot;
+      
+      if (selectedSlot === 'lunch' && lunchConfig) {
+        if (lunchConfig.lunchType === 'school_trip') {
+          mealType = 'lunchbox_trip' as MealSlot;
+        } else if (lunchConfig.lunchType === 'special_diet') {
+          mealType = 'lunchbox_special' as MealSlot;
+        }
+      }
+      
+      navigate(`/generate-meal?childId=${selectedChild.id}&mealType=${mealType}&date=${selectedDate}&from=planning`);
     }
   };
 
@@ -277,9 +326,21 @@ export default function Planning() {
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => navigate("/profile-settings")}>
-            <Settings className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            {selectedChild && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate(`/planning-express?childId=${selectedChild.id}`)}
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Planning Express
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={() => navigate("/profile-settings")}>
+              <Settings className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Child selector */}
@@ -293,8 +354,9 @@ export default function Planning() {
 
         {/* Week navigation */}
         <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
-          <Button variant="ghost" size="icon" onClick={goToPreviousWeek}>
-            <ChevronLeft className="w-5 h-5" />
+          <Button variant="ghost" size="sm" onClick={goToPreviousWeek} className="flex items-center gap-1">
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Semaine précédente</span>
           </Button>
           <div className="text-center">
             <button
@@ -309,8 +371,9 @@ export default function Planning() {
               </p>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={goToNextWeek}>
-            <ChevronRight className="w-5 h-5" />
+          <Button variant="ghost" size="sm" onClick={goToNextWeek} className="flex items-center gap-1">
+            <span className="hidden sm:inline">Semaine suivante</span>
+            <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
 
@@ -328,15 +391,27 @@ export default function Planning() {
             </Button>
           </div>
         ) : (
-          <WeeklyPlanningGrid
-            weekDays={weekDays}
-            plannedMeals={plannedMeals}
-            lunchConfigs={lunchConfigs}
-            onAddRecipe={handleAddRecipe}
-            onViewRecipe={handleViewRecipe}
-            onEditRecipe={handleEditRecipe}
-            onDeleteRecipe={handleDeleteRecipe}
-          />
+          <>
+            <WeeklyPlanningGrid
+              weekDays={weekDays}
+              plannedMeals={plannedMeals}
+              lunchConfigs={lunchConfigs}
+              onAddRecipe={handleAddRecipe}
+              onViewRecipe={handleViewRecipe}
+              onEditRecipe={handleEditRecipe}
+              onDeleteRecipe={handleDeleteRecipe}
+              onReplaceRecipe={handleReplaceRecipe}
+            />
+            
+            {/* Summary */}
+            <PlanningSummary
+              plannedMealsCount={summaryStats.plannedMealsCount}
+              totalMealsCount={summaryStats.totalMealsCount}
+              lunchboxCount={summaryStats.lunchboxCount}
+              homeLunchCount={summaryStats.homeLunchCount}
+              canteenCount={summaryStats.canteenCount}
+            />
+          </>
         )}
 
         {/* Add Recipe Dialog */}
