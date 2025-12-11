@@ -1,13 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@supabase/auth-helpers-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ArrowLeft, Plus, Edit, Check, X, Coffee, Utensils, Cookie, Moon } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfWeek, addDays } from "date-fns";
+import { format, startOfWeek, endOfWeek, addWeeks, addDays, isSameDay, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import { MealSlot, MEAL_LABELS, MEAL_ORDER } from "@/lib/meals";
+import { MealSlot, LunchType, determineLunchType, ChildMealConfig } from "@/lib/meals";
+import { WeeklyPlanningGrid } from "@/components/planning/WeeklyPlanningGrid";
+import { ChildSelector } from "@/components/planning/ChildSelector";
+import { AddRecipeDialog } from "@/components/planning/AddRecipeDialog";
+import { toast } from "sonner";
 
 interface PlannedMeal {
   id: string;
@@ -16,196 +19,338 @@ interface PlannedMeal {
   recipe: {
     id: string;
     name: string;
-  };
+    preparation_time?: number;
+  } | null;
 }
 
-const MEAL_ICONS: Record<MealSlot, typeof Coffee> = {
-  breakfast: Coffee,
-  lunch: Utensils,
-  snack: Cookie,
-  dinner: Moon,
-};
+interface Child {
+  id: string;
+  name: string;
+  birth_date: string;
+  regime_special: boolean;
+  dejeuner_habituel: string;
+  sortie_scolaire_dates: string[];
+}
+
+interface DayLunchConfig {
+  date: string;
+  lunchType: LunchType;
+  label: string;
+  canGenerate: boolean;
+  isLunchbox: boolean;
+}
 
 export default function Planning() {
   const navigate = useNavigate();
   const session = useSession();
-  const [searchParams] = useSearchParams();
-  const childId = searchParams.get("childId");
+  const [searchParams, setSearchParams] = useSearchParams();
   
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => 
+    startOfWeek(new Date(), { weekStartsOn: 1 })
+  );
+  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [plannedMeals, setPlannedMeals] = useState<PlannedMeal[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<MealSlot | null>(null);
 
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  // Generate week days
   const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const date = addDays(weekStart, i);
+    const date = addDays(currentWeekStart, i);
     return {
-      date: format(date, "yyyy-MM-dd"),
+      date,
+      dateString: format(date, "yyyy-MM-dd"),
       dayName: format(date, "EEEE", { locale: fr }),
       dayNumber: format(date, "d"),
-      isToday: format(date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd"),
+      isToday: isSameDay(date, new Date()),
     };
   });
 
+  const weekEnd = endOfWeek(currentWeekStart, { weekStartsOn: 1 });
+  const weekLabel = `${format(currentWeekStart, "d MMM", { locale: fr })} au ${format(weekEnd, "d MMM yyyy", { locale: fr })}`;
+
+  // Calculate lunch configs for each day
+  const calculateLunchConfigs = useCallback((): DayLunchConfig[] => {
+    if (!selectedChild) return [];
+
+    return weekDays.map((day) => {
+      const schoolTripDates = selectedChild.sortie_scolaire_dates || [];
+      const hasSchoolTripToday = schoolTripDates.some((tripDate) => {
+        try {
+          return isSameDay(parseISO(tripDate), day.date);
+        } catch {
+          return false;
+        }
+      });
+
+      const config: ChildMealConfig = {
+        hasSpecialDiet: selectedChild.regime_special || false,
+        hasSchoolTripToday,
+        eatsAtCanteen: selectedChild.dejeuner_habituel === "cantine",
+      };
+
+      const lunchType = determineLunchType(config);
+      
+      const lunchLabels: Record<LunchType, string> = {
+        school_trip: "Lunchbox sortie",
+        special_diet: "Lunchbox personnalisée",
+        canteen: "Cantine",
+        home: "Déjeuner maison",
+      };
+
+      return {
+        date: day.dateString,
+        lunchType,
+        label: lunchLabels[lunchType],
+        canGenerate: lunchType !== "canteen",
+        isLunchbox: lunchType === "school_trip" || lunchType === "special_diet",
+      };
+    });
+  }, [selectedChild, weekDays]);
+
+  const lunchConfigs = calculateLunchConfigs();
+
+  // Fetch planned meals
   useEffect(() => {
     const fetchPlannedMeals = async () => {
-      if (!session?.user?.id) return;
-      
-      const startDate = weekDays[0].date;
-      const endDate = weekDays[6].date;
+      if (!session?.user?.id || !selectedChild) {
+        setPlannedMeals([]);
+        setLoading(false);
+        return;
+      }
 
-      let query = supabase
+      setLoading(true);
+      const startDate = format(currentWeekStart, "yyyy-MM-dd");
+      const endDate = format(weekEnd, "yyyy-MM-dd");
+
+      const { data, error } = await supabase
         .from("meal_plans")
         .select(`
           id,
           date,
           meal_time,
-          recipe:recipes(id, name)
+          recipe:recipes(id, name, preparation_time)
         `)
         .eq("profile_id", session.user.id)
+        .eq("child_id", selectedChild.id)
         .gte("date", startDate)
         .lte("date", endDate);
 
-      if (childId) {
-        query = query.eq("child_id", childId);
-      }
-
-      const { data, error } = await query;
-      
       if (!error && data) {
-        setPlannedMeals(data as any);
+        setPlannedMeals(data as PlannedMeal[]);
       }
       setLoading(false);
     };
 
     fetchPlannedMeals();
-  }, [session?.user?.id, childId]);
+  }, [session?.user?.id, selectedChild?.id, currentWeekStart]);
 
-  const getMealsForDay = (date: string) => {
-    return plannedMeals.filter(meal => meal.date === date);
-  };
-
-  const getMealForSlot = (date: string, slot: MealSlot) => {
-    const meals = getMealsForDay(date);
-    // Handle legacy lunchbox -> lunch conversion
-    if (slot === 'lunch') {
-      return meals.find(m => m.meal_time === 'lunch' || m.meal_time === 'lunchbox');
+  // Handle child selection
+  const handleSelectChild = useCallback((child: Child | null) => {
+    setSelectedChild(child);
+    if (child) {
+      setSearchParams({ childId: child.id });
     }
-    return meals.find(m => m.meal_time === slot);
+  }, [setSearchParams]);
+
+  // Navigation
+  const goToPreviousWeek = () => setCurrentWeekStart((prev) => addWeeks(prev, -1));
+  const goToNextWeek = () => setCurrentWeekStart((prev) => addWeeks(prev, 1));
+  const goToCurrentWeek = () => setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+
+  // Recipe actions
+  const handleAddRecipe = (date: string, slot: MealSlot) => {
+    setSelectedDate(date);
+    setSelectedSlot(slot);
+    setDialogOpen(true);
   };
 
-  const countPlannedMeals = (date: string) => {
-    return getMealsForDay(date).length;
+  const handleViewRecipe = (recipeId: string) => {
+    navigate(`/recipe/${recipeId}`);
   };
+
+  const handleEditRecipe = (date: string, slot: MealSlot, mealId: string) => {
+    setSelectedDate(date);
+    setSelectedSlot(slot);
+    setDialogOpen(true);
+  };
+
+  const handleDeleteRecipe = async (mealId: string) => {
+    try {
+      const { error } = await supabase
+        .from("meal_plans")
+        .delete()
+        .eq("id", mealId);
+
+      if (error) throw error;
+
+      setPlannedMeals((prev) => prev.filter((meal) => meal.id !== mealId));
+      toast.success("Recette supprimée du planning");
+    } catch (error) {
+      console.error("Error deleting meal:", error);
+      toast.error("Erreur lors de la suppression");
+    }
+  };
+
+  const handleSelectRecipe = async (recipe: { id: string; name: string; preparation_time: number }) => {
+    if (!session?.user?.id || !selectedChild || !selectedDate || !selectedSlot) return;
+
+    try {
+      // Check if there's already a meal for this slot
+      const existingMeal = plannedMeals.find(
+        (meal) => meal.date === selectedDate && (meal.meal_time === selectedSlot || (selectedSlot === 'lunch' && meal.meal_time === 'lunchbox'))
+      );
+
+      if (existingMeal) {
+        // Update existing
+        const { error } = await supabase
+          .from("meal_plans")
+          .update({ recipe_id: recipe.id })
+          .eq("id", existingMeal.id);
+
+        if (error) throw error;
+
+        setPlannedMeals((prev) =>
+          prev.map((meal) =>
+            meal.id === existingMeal.id
+              ? { ...meal, recipe: { id: recipe.id, name: recipe.name, preparation_time: recipe.preparation_time } }
+              : meal
+          )
+        );
+      } else {
+        // Insert new
+        const { data, error } = await supabase
+          .from("meal_plans")
+          .insert({
+            profile_id: session.user.id,
+            child_id: selectedChild.id,
+            date: selectedDate,
+            meal_time: selectedSlot,
+            recipe_id: recipe.id,
+          })
+          .select(`
+            id,
+            date,
+            meal_time,
+            recipe:recipes(id, name, preparation_time)
+          `)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
+          setPlannedMeals((prev) => [...prev, data as PlannedMeal]);
+        }
+      }
+
+      toast.success("Recette ajoutée au planning");
+    } catch (error) {
+      console.error("Error adding recipe:", error);
+      toast.error("Erreur lors de l'ajout de la recette");
+    }
+  };
+
+  const handleGenerateRecipe = () => {
+    if (selectedChild && selectedSlot) {
+      navigate(`/generate-meal?childId=${selectedChild.id}&mealType=${selectedSlot}&date=${selectedDate}`);
+    }
+  };
+
+  const childIdFromParams = searchParams.get("childId");
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h1 className="text-xl font-bold">Planification de la semaine</h1>
-            <p className="text-sm text-muted-foreground">
-              Organisez les 4 repas quotidiens de votre enfant
-            </p>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-4xl mx-auto p-4 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold">Planning de la semaine</h1>
+              <p className="text-sm text-muted-foreground">
+                Gérez les 4 repas quotidiens de votre enfant
+              </p>
+            </div>
           </div>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/profile-settings")}>
+            <Settings className="w-5 h-5" />
+          </Button>
         </div>
 
+        {/* Child selector */}
+        {session?.user?.id && (
+          <ChildSelector
+            userId={session.user.id}
+            selectedChildId={selectedChild?.id || childIdFromParams}
+            onSelectChild={handleSelectChild}
+          />
+        )}
+
+        {/* Week navigation */}
+        <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
+          <Button variant="ghost" size="icon" onClick={goToPreviousWeek}>
+            <ChevronLeft className="w-5 h-5" />
+          </Button>
+          <div className="text-center">
+            <button
+              onClick={goToCurrentWeek}
+              className="font-semibold hover:text-primary transition-colors"
+            >
+              Semaine du {weekLabel}
+            </button>
+            {selectedChild && (
+              <p className="text-sm text-muted-foreground">
+                Planning pour {selectedChild.name}
+              </p>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" onClick={goToNextWeek}>
+            <ChevronRight className="w-5 h-5" />
+          </Button>
+        </div>
+
+        {/* Weekly grid */}
         {loading ? (
-          <div className="text-center py-8 text-muted-foreground">
-            Chargement...
+          <div className="text-center py-12 text-muted-foreground">Chargement...</div>
+        ) : !selectedChild ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground mb-4">
+              Sélectionnez un enfant pour voir son planning
+            </p>
+            <Button variant="outline" onClick={() => navigate("/profile-settings")}>
+              <Settings className="w-4 h-4 mr-2" />
+              Configurer les enfants
+            </Button>
           </div>
         ) : (
-          <div className="space-y-3">
-            {weekDays.map((day) => {
-              const plannedCount = countPlannedMeals(day.date);
-              const isFullyPlanned = plannedCount >= 4;
-              
-              return (
-                <Card
-                  key={day.date}
-                  className={`p-4 ${day.isToday ? "ring-2 ring-primary" : ""}`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                        day.isToday ? "bg-primary text-primary-foreground" : "bg-muted"
-                      }`}>
-                        {day.dayNumber}
-                      </div>
-                      <div>
-                        <span className="font-semibold capitalize">{day.dayName}</span>
-                        {day.isToday && (
-                          <span className="ml-2 text-xs text-primary">(Aujourd'hui)</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{plannedCount}/4</span>
-                      {isFullyPlanned ? (
-                        <Check className="w-4 h-4 text-pastel-green" />
-                      ) : (
-                        <X className="w-4 h-4 text-destructive" />
-                      )}
-                    </div>
-                  </div>
+          <WeeklyPlanningGrid
+            weekDays={weekDays}
+            plannedMeals={plannedMeals}
+            lunchConfigs={lunchConfigs}
+            onAddRecipe={handleAddRecipe}
+            onViewRecipe={handleViewRecipe}
+            onEditRecipe={handleEditRecipe}
+            onDeleteRecipe={handleDeleteRecipe}
+          />
+        )}
 
-                  {/* Afficher les 4 repas */}
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    {MEAL_ORDER.map((slot) => {
-                      const meal = getMealForSlot(day.date, slot);
-                      const Icon = MEAL_ICONS[slot];
-                      return (
-                        <div
-                          key={slot}
-                          className={`flex items-center gap-2 p-2 rounded-lg text-xs ${
-                            meal ? "bg-muted/50" : "bg-muted/20 border border-dashed border-muted"
-                          }`}
-                        >
-                          <Icon className={`w-4 h-4 ${meal ? "text-primary" : "text-muted-foreground"}`} />
-                          <span className={`flex-1 truncate ${!meal ? "text-muted-foreground italic" : ""}`}>
-                            {meal?.recipe?.name || MEAL_LABELS[slot]}
-                          </span>
-                          {meal && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-5 w-5 p-0"
-                              onClick={() => navigate(`/recipe/${meal.recipe?.id}`)}
-                            >
-                              <Edit className="w-3 h-3" />
-                            </Button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => navigate(`/planning/day/${day.date}${childId ? `?childId=${childId}` : ""}`)}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Compléter
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => navigate(`/planning/day/${day.date}${childId ? `?childId=${childId}` : ""}`)}
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Modifier
-                    </Button>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+        {/* Add Recipe Dialog */}
+        {session?.user?.id && (
+          <AddRecipeDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            date={selectedDate}
+            slot={selectedSlot}
+            userId={session.user.id}
+            childId={selectedChild?.id || null}
+            onSelectRecipe={handleSelectRecipe}
+            onGenerateRecipe={handleGenerateRecipe}
+          />
         )}
       </div>
     </div>
