@@ -21,6 +21,21 @@ export interface NutritionalInfo {
   fat: number;
 }
 
+// Conservation et réutilisation
+export interface StorageInfo {
+  method: 'fridge' | 'freezer' | 'room_temp';
+  duration_days: number;
+  container: string;
+  tips?: string;
+}
+
+export interface ReuseInfo {
+  total_uses: number;         // Combien de fois cette recette peut servir
+  remaining_uses?: number;    // Utilisations restantes (pour le tracking)
+  best_days?: string[];       // Meilleurs jours pour réutiliser
+  reuse_tips?: string;        // Conseils de réutilisation
+}
+
 export interface Recipe {
   id: string;
   profile_id: string;
@@ -51,6 +66,12 @@ export interface Recipe {
     duration?: number;
     tips?: string;
   }>;
+  // Parent pressé - réutilisation
+  reuse_info?: ReuseInfo;
+  storage_info?: StorageInfo;
+  is_batch_cooking?: boolean;
+  is_reuse?: boolean;           // True si c'est une réutilisation d'une recette existante
+  original_recipe_id?: string;  // ID de la recette originale si c'est une réutilisation
 }
 
 export interface RecipeFilters {

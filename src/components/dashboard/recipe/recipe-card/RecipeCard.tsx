@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RecipeHealthBenefits } from "../RecipeHealthBenefits";
+import { ReuseInfoDisplay } from "./ReuseInfo";
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -95,6 +96,15 @@ export const RecipeCard = ({ recipe, isPlanned, isNew, onAdd }: RecipeCardProps)
           {recipe.health_benefits && (
             <RecipeHealthBenefits benefits={recipe.health_benefits} />
           )}
+
+          {/* Infos de réutilisation pour parents pressés */}
+          <ReuseInfoDisplay
+            reuseInfo={recipe.reuse_info}
+            storageInfo={recipe.storage_info}
+            isBatchCooking={recipe.is_batch_cooking}
+            isReuse={recipe.is_reuse}
+            compact
+          />
 
           <Collapsible open={isOpen} onOpenChange={setIsOpen}>
             <CollapsibleContent className="space-y-6 mt-4">

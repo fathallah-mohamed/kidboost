@@ -13,9 +13,9 @@ serve(async (req) => {
   }
 
   try {
-    const { childId, profileId, mealType, date, context } = await req.json();
+    const { childId, profileId, mealType, date, context, busyParentMode = true } = await req.json();
     
-    console.log("generate-daily-meal - Request:", { childId, profileId, mealType, date, context });
+    console.log("generate-daily-meal - Request:", { childId, profileId, mealType, date, context, busyParentMode });
 
     if (!childId || !profileId || !mealType || !date) {
       throw new Error("childId, profileId, mealType et date sont requis");
@@ -34,6 +34,87 @@ serve(async (req) => {
 
     if (childError || !child) {
       throw new Error("Enfant non trouvé");
+    }
+
+    // BUSY PARENT MODE: Check for reusable recipes first
+    if (busyParentMode) {
+      console.log("Busy parent mode enabled - checking for reusable recipes");
+      
+      // Get recipes from last 3 days that can be reused
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      
+      const { data: reusableRecipes } = await supabase
+        .from('recipes')
+        .select('*')
+        .eq('child_id', childId)
+        .eq('meal_type', mealType)
+        .gte('created_at', threeDaysAgo.toISOString())
+        .order('created_at', { ascending: false });
+
+      // Check meal plans to count how many times each recipe has been used
+      const { data: recentMealPlans } = await supabase
+        .from('meal_plans')
+        .select('recipe_id, date')
+        .eq('child_id', childId)
+        .eq('meal_time', mealType)
+        .gte('date', threeDaysAgo.toISOString().split('T')[0]);
+
+      const recipeUsageCount: Record<string, number> = {};
+      recentMealPlans?.forEach(plan => {
+        recipeUsageCount[plan.recipe_id] = (recipeUsageCount[plan.recipe_id] || 0) + 1;
+      });
+
+      // Find a recipe that can still be reused (default max uses: snack=3, meals=2)
+      const maxUses = mealType === 'snack' ? 3 : 2;
+      
+      for (const recipe of reusableRecipes || []) {
+        const currentUses = recipeUsageCount[recipe.id] || 1;
+        const recipeMaxUses = recipe.reuse_info?.total_uses || maxUses;
+        
+        if (currentUses < recipeMaxUses) {
+          console.log(`Reusing recipe "${recipe.name}" (${currentUses}/${recipeMaxUses} uses)`);
+          
+          // Create meal plan entry for reuse
+          const { data: existingPlan } = await supabase
+            .from('meal_plans')
+            .select('id')
+            .eq('profile_id', profileId)
+            .eq('child_id', childId)
+            .eq('date', date)
+            .eq('meal_time', mealType)
+            .maybeSingle();
+
+          if (existingPlan) {
+            await supabase
+              .from('meal_plans')
+              .update({ recipe_id: recipe.id, is_auto_generated: true })
+              .eq('id', existingPlan.id);
+          } else {
+            await supabase
+              .from('meal_plans')
+              .insert({
+                profile_id: profileId,
+                child_id: childId,
+                recipe_id: recipe.id,
+                date: date,
+                meal_time: mealType,
+                is_auto_generated: true
+              });
+          }
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              recipe: { ...recipe, is_reuse: true, remaining_uses: recipeMaxUses - currentUses - 1 },
+              message: `Réutilisation de "${recipe.name}" (${currentUses + 1}/${recipeMaxUses})`,
+              isReuse: true
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      console.log("No reusable recipe found, generating new one with batch cooking focus");
     }
 
     // Get recent recipes for this child to avoid duplicates (last 30 days)
@@ -153,9 +234,20 @@ CONTRAINTES STRICTES - LUNCHBOX RÉGIME SPÉCIAL:
       ? `\n\n⚠️ RECETTES À NE PAS REPRODUIRE (déjà préparées récemment):\n${recipesToExclude.map(r => `- ${r}`).join('\n')}\nTu DOIS proposer une recette DIFFÉRENTE de celles listées ci-dessus.`
       : '';
 
+    // Busy parent mode instructions
+    const busyParentInstructions = busyParentMode ? `
+🏃 MODE PARENT PRESSÉ ACTIVÉ:
+- Cette recette DOIT pouvoir être réutilisée ${mealType === 'snack' ? '3 fois' : '2 fois'} dans la semaine
+- Privilégie le BATCH COOKING: préparer une fois, manger plusieurs fois
+- Indique clairement comment conserver et réchauffer
+- Temps de préparation minimal, résultat maximal
+- Les goûters doivent pouvoir durer 2-3 jours (cake, muffins, biscuits maison)
+- Les plats doivent bien se réchauffer ou se manger froids` : '';
+
     const prompt = `Crée une recette ORIGINALE et UNIQUE de ${mealConfig.label} pour ${child.name}, ${childAge} ans.
 
 🎯 OBJECTIF: Préparer un repas que ${child.name} va ADORER tout en respectant ses contraintes.
+${busyParentInstructions}
 
 📋 INSTRUCTIONS SPÉCIFIQUES:
 ${specificInstructions}
@@ -187,7 +279,8 @@ ${exclusionText}
 - Nom FUN et ATTRAYANT pour un enfant (évite les noms génériques comme "Salade de...")
 - Présentation visuelle adaptée aux enfants (couleurs, formes)
 - Équilibre nutritionnel
-- Instructions simples et claires`;
+- Instructions simples et claires
+${busyParentMode ? '- OBLIGATOIRE: Indique comment conserver et combien de fois réutiliser' : ''}`;
 
     console.log("Calling AI with enhanced prompt for unique recipe");
     console.log("Excluding recipes:", recipesToExclude.slice(0, 5).join(", "), recipesToExclude.length > 5 ? `... and ${recipesToExclude.length - 5} more` : "");
@@ -231,7 +324,7 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
           type: "function",
           function: {
             name: "create_recipe",
-            description: "Crée une recette adaptée à l'enfant",
+            description: "Crée une recette adaptée à l'enfant avec infos de conservation",
             parameters: {
               type: "object",
               properties: {
@@ -264,7 +357,27 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
                     fiber: { type: "number" }
                   }
                 },
-                tips: { type: "string", description: "Conseil pour les parents" }
+                tips: { type: "string", description: "Conseil pour les parents" },
+                reuse_info: {
+                  type: "object",
+                  description: "Infos de réutilisation pour parents pressés",
+                  properties: {
+                    total_uses: { type: "number", description: "Nombre de fois que cette recette peut servir (2-4)" },
+                    best_days: { type: "array", items: { type: "string" }, description: "Meilleurs jours pour réutiliser (J+1, J+2, etc)" },
+                    reuse_tips: { type: "string", description: "Conseils pour réutiliser (réchauffer, manger froid, etc)" }
+                  }
+                },
+                storage_info: {
+                  type: "object",
+                  description: "Comment conserver cette préparation",
+                  properties: {
+                    method: { type: "string", enum: ["fridge", "freezer", "room_temp"], description: "Méthode de conservation" },
+                    duration_days: { type: "number", description: "Durée de conservation en jours" },
+                    container: { type: "string", description: "Type de contenant recommandé" },
+                    tips: { type: "string", description: "Conseils de conservation" }
+                  }
+                },
+                is_batch_cooking: { type: "boolean", description: "Si cette recette est adaptée au batch cooking" }
               },
               required: ["name", "ingredients", "instructions", "preparation_time", "nutritional_info"]
             }
@@ -297,7 +410,21 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
       throw new Error("Réponse IA invalide, veuillez réessayer");
     }
 
-    // Save recipe to database
+    // Default reuse info based on meal type if not provided
+    const defaultReuseInfo = {
+      total_uses: mealType === 'snack' ? 3 : 2,
+      best_days: mealType === 'snack' ? ['J+1', 'J+2'] : ['J+1'],
+      reuse_tips: mealType === 'snack' ? 'Se conserve dans une boîte hermétique' : 'Réchauffer au micro-ondes ou manger froid'
+    };
+
+    const defaultStorageInfo = {
+      method: 'fridge' as const,
+      duration_days: mealType === 'snack' ? 3 : 2,
+      container: 'Boîte hermétique',
+      tips: 'Conserver au réfrigérateur'
+    };
+
+    // Save recipe to database with reuse info
     const { data: savedRecipe, error: saveError } = await supabase
       .from('recipes')
       .insert({
@@ -312,14 +439,39 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
         is_generated: true,
         auto_generated: true,
         difficulty: 'easy',
-        servings: 1,
+        servings: recipeData.reuse_info?.total_uses || defaultReuseInfo.total_uses,
         max_prep_time: availableTime,
         source: 'ia',
         allergens: allergies ? allergies.split(", ") : [],
         dietary_preferences: restrictions ? restrictions.split(", ") : [],
+        health_benefits: JSON.stringify([
+          ...(recipeData.reuse_info ? [{
+            icon: '🔄',
+            category: 'reuse',
+            description: `Peut servir ${recipeData.reuse_info.total_uses || defaultReuseInfo.total_uses} fois`
+          }] : []),
+          ...(recipeData.storage_info ? [{
+            icon: '❄️',
+            category: 'storage',
+            description: `Conservation: ${recipeData.storage_info.duration_days || defaultStorageInfo.duration_days} jours`
+          }] : []),
+          ...(recipeData.is_batch_cooking ? [{
+            icon: '👨‍🍳',
+            category: 'batch',
+            description: 'Parfait pour le batch cooking'
+          }] : [])
+        ])
       })
       .select()
       .single();
+
+    // Add reuse and storage info to the response
+    const recipeWithReuseInfo = savedRecipe ? {
+      ...savedRecipe,
+      reuse_info: recipeData.reuse_info || defaultReuseInfo,
+      storage_info: recipeData.storage_info || defaultStorageInfo,
+      is_batch_cooking: recipeData.is_batch_cooking || false
+    } : null;
 
     if (saveError) {
       console.error("Error saving recipe:", saveError);
@@ -365,13 +517,15 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
       }
     }
 
-    console.log("Successfully created meal:", savedRecipe.name);
+    console.log("Successfully created meal:", savedRecipe.name, "with reuse info:", recipeData.reuse_info);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        recipe: savedRecipe,
-        message: `Recette "${savedRecipe.name}" générée avec succès`
+        recipe: recipeWithReuseInfo,
+        message: `Recette "${savedRecipe.name}" générée - peut servir ${recipeData.reuse_info?.total_uses || defaultReuseInfo.total_uses} fois`,
+        reuseInfo: recipeData.reuse_info || defaultReuseInfo,
+        storageInfo: recipeData.storage_info || defaultStorageInfo
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
