@@ -486,24 +486,10 @@ Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif da
       tips: 'Conserver au réfrigérateur'
     };
 
-    // Build health benefits array (not stringified - Supabase handles JSON columns directly)
-    const healthBenefitsArray = [
-      ...(recipeData.reuse_info ? [{
-        icon: '🔄',
-        category: 'reuse',
-        description: `Peut servir ${recipeData.reuse_info.total_uses || defaultReuseInfo.total_uses} fois`
-      }] : []),
-      ...(recipeData.storage_info ? [{
-        icon: '❄️',
-        category: 'storage',
-        description: `Conservation: ${recipeData.storage_info.duration_days || defaultStorageInfo.duration_days} jours`
-      }] : []),
-      ...(recipeData.is_batch_cooking ? [{
-        icon: '👨‍🍳',
-        category: 'batch',
-        description: 'Parfait pour le batch cooking'
-      }] : [])
-    ];
+    // Build health benefits array - use valid categories from DB constraint:
+    // 'cognitive', 'energy', 'satiety', 'digestive', 'immunity', 'growth', 'mental', 'organs', 'beauty', 'physical', 'prevention', 'global'
+    // Note: reuse/storage/batch info is stored separately in the response, not in health_benefits
+    const healthBenefitsArray: Array<{icon: string, category: string, description: string}> = [];
 
     // Save recipe to database with reuse info
     const { data: savedRecipe, error: saveError } = await supabase
