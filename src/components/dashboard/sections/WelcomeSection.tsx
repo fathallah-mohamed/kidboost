@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuickPlan } from "../meal-planner/hooks/useQuickPlan";
 import { useDashboardData } from "../hooks/useDashboardData";
-import { ChildProfileBadge } from "./ChildProfileBadge";
 import { TodayMeals } from "./TodayMeals";
 import { TodoNow } from "./TodoNow";
 import { WeekProgress } from "./WeekProgress";
@@ -13,7 +12,7 @@ import { NutritionBalance } from "./NutritionBalance";
 import { QuickStartGuide } from "./QuickStartGuide";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MealSlot, LunchType, determineLunchType } from "@/lib/meals";
+import { MealSlot, LunchType } from "@/lib/meals";
 import { Users, Settings, User } from "lucide-react";
 import {
   Dialog,
@@ -21,28 +20,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { GlobalChildSelector } from "@/components/common/GlobalChildSelector";
+import { useChild, calculateAge } from "@/contexts/ChildContext";
 import { format } from "date-fns";
-
-interface Child {
-  id: string;
-  name: string;
-  birth_date: string;
-  allergies: string[] | null;
-  meal_objectives: string[] | null;
-  preferences: string[] | null;
-  dislikes: string[] | null;
-  available_time: number | null;
-  dejeuner_habituel?: string;
-  regime_special?: boolean;
-  sortie_scolaire_dates?: string[] | null;
-}
 
 interface MealData {
   name: string | null;
@@ -59,10 +39,12 @@ interface WelcomeSectionProps {
 export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps) => {
   const navigate = useNavigate();
   const [username, setUsername] = useState<string>("");
-  const [children, setChildren] = useState<Child[]>([]);
-  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [showChildSelector, setShowChildSelector] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  
+  // Use global child context
+  const { children, selectedChild, setSelectedChild, loading: childrenLoading } = useChild();
+  
   const [dashboardData, setDashboardData] = useState<{
     todayMeals: {
       breakfast: MealData;
@@ -107,27 +89,16 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
   // Check if child has special diet from profile settings
   const hasSpecialDiet = selectedChild?.regime_special || false;
 
-  // Fetch user and children on mount
+  // Fetch username on mount
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const fetchUsername = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email) {
         setUsername(user.email.split("@")[0]);
       }
-
-      const { data: childrenData } = await supabase
-        .from('children_profiles')
-        .select('id, name, birth_date, allergies, meal_objectives, preferences, dislikes, available_time, dejeuner_habituel, regime_special, sortie_scolaire_dates')
-        .eq('profile_id', userId);
-
-      if (childrenData && childrenData.length > 0) {
-        setChildren(childrenData);
-        setSelectedChild(childrenData[0]);
-      }
     };
-
-    fetchInitialData();
-  }, [userId]);
+    fetchUsername();
+  }, []);
 
   // Fetch dashboard data when child or date changes
   const refreshDashboard = useCallback(async () => {
@@ -167,17 +138,6 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
 
     return () => clearTimeout(timer);
   }, [refreshDashboard]);
-
-  const calculateAge = (birthDate: string): number => {
-    const today = new Date();
-    const birth = new Date(birthDate);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    return age;
-  };
 
   const handleActionSelect = async (action: string) => {
     if (action === "quick-plan") {
@@ -296,16 +256,19 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
     }));
   };
 
-  const handleChildChange = (childId: string) => {
-    const child = children.find(c => c.id === childId);
-    if (child) {
-      setSelectedChild(child);
-    }
-  };
-
   const handleDateChange = (date: Date) => {
     setSelectedDate(date);
   };
+
+  // Show loading state
+  if (childrenLoading) {
+    return (
+      <div className="space-y-4 animate-fade-in">
+        <div className="h-8 bg-muted animate-pulse rounded" />
+        <div className="h-40 bg-muted animate-pulse rounded" />
+      </div>
+    );
+  }
 
   // Show QuickStartGuide if no children
   if (children.length === 0) {
@@ -337,25 +300,10 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
           </p>
         </div>
 
-        {/* Child Selector Dropdown + Voir fiche */}
+        {/* Global Child Selector + Voir fiche */}
         {children.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground">Enfant :</span>
-            <Select
-              value={selectedChild?.id || ""}
-              onValueChange={handleChildChange}
-            >
-              <SelectTrigger className="w-48 h-9">
-                <SelectValue placeholder="Sélectionner un enfant" />
-              </SelectTrigger>
-              <SelectContent className="bg-background">
-                {children.map((child) => (
-                  <SelectItem key={child.id} value={child.id}>
-                    {child.name} ({calculateAge(child.birth_date)} ans)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <GlobalChildSelector />
             
             {/* Voir fiche enfant button */}
             {selectedChild && (
@@ -467,7 +415,7 @@ export const WelcomeSection = ({ userId, onSectionChange }: WelcomeSectionProps)
                 variant={selectedChild?.id === child.id ? "default" : "outline"}
                 className="w-full justify-start"
                 onClick={() => {
-                  handleChildChange(child.id);
+                  setSelectedChild(child);
                   setShowChildSelector(false);
                 }}
               >
