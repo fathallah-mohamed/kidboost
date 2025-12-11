@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Coffee, Utensils, Cookie, Moon, Plus, MoreHorizontal, Eye, Edit, Trash2, Backpack, Lock, RefreshCw } from "lucide-react";
+import { Coffee, Utensils, Cookie, Moon, Plus, MoreHorizontal, Eye, Edit, Trash2, Backpack, Lock, RefreshCw, Sparkles, RotateCcw } from "lucide-react";
 import { MealSlot, MEAL_ORDER, LunchType } from "@/lib/meals";
 import {
   DropdownMenu,
@@ -20,6 +20,9 @@ interface PlannedMeal {
     id: string;
     name: string;
     preparation_time?: number;
+    is_reuse?: boolean;
+    servings?: number;
+    created_at?: string;
   } | null;
 }
 
@@ -104,6 +107,30 @@ export function WeeklyPlanningGrid({
     return plannedMeals.find(
       (meal) => meal.date === dateString && (meal.meal_time === slot || (slot === 'lunch' && meal.meal_time === 'lunchbox'))
     );
+  };
+
+  // Déterminer si une recette est une réutilisation (préparée un autre jour)
+  const isRecipeReuse = (meal: PlannedMeal): boolean => {
+    if (!meal?.recipe) return false;
+    
+    // Si la recette a le flag is_reuse explicite
+    if (meal.recipe.is_reuse) return true;
+    
+    // Sinon, vérifier si cette recette est utilisée un autre jour avant cette date
+    const recipeId = meal.recipe.id;
+    const currentDate = new Date(meal.date);
+    
+    const earlierUsage = plannedMeals.find(m => 
+      m.recipe?.id === recipeId && 
+      new Date(m.date) < currentDate
+    );
+    
+    return !!earlierUsage;
+  };
+
+  // Compter les utilisations totales d'une recette dans la semaine
+  const getRecipeUsageCount = (recipeId: string): number => {
+    return plannedMeals.filter(m => m.recipe?.id === recipeId).length;
   };
 
   const getLunchConfigForDay = (dateString: string): DayLunchConfig | undefined => {
@@ -272,10 +299,29 @@ export function WeeklyPlanningGrid({
                       {/* Contenu */}
                       {meal?.recipe ? (
                         <div className="space-y-1">
-                          <p className="text-sm font-medium truncate pr-6">{meal.recipe.name}</p>
-                          {meal.recipe.preparation_time && (
-                            <p className="text-xs text-muted-foreground">{meal.recipe.preparation_time} min</p>
+                          {/* Badge réutilisation ou nouvelle recette */}
+                          {isRecipeReuse(meal) ? (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800 mb-1">
+                              <RotateCcw className="w-2.5 h-2.5 mr-0.5" />
+                              Déjà préparé
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800 mb-1">
+                              <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                              Nouvelle recette
+                            </Badge>
                           )}
+                          <p className="text-sm font-medium truncate pr-6">{meal.recipe.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {meal.recipe.preparation_time && (
+                              <span>{meal.recipe.preparation_time} min</span>
+                            )}
+                            {getRecipeUsageCount(meal.recipe.id) > 1 && (
+                              <span className="text-emerald-600 dark:text-emerald-400">
+                                ×{getRecipeUsageCount(meal.recipe.id)} cette semaine
+                              </span>
+                            )}
+                          </div>
                           
                           {/* Menu actions */}
                           {canModify && (
