@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Calendar, ShoppingCart, ChefHat, CheckCircle, ArrowRight } from "lucide-react";
+import { AlertCircle, Calendar, ShoppingCart, ChefHat, CheckCircle, ArrowRight, Target } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 
@@ -19,6 +19,7 @@ interface TodoNowProps {
   daysPlanned: number;
   totalDays: number;
   shoppingListReady: boolean;
+  mealsToplan?: number;
   onAction: (route: string) => void;
 }
 
@@ -28,28 +29,30 @@ export const TodoNow = ({
   daysPlanned,
   totalDays,
   shoppingListReady,
+  mealsToplan = 0,
   onAction,
 }: TodoNowProps) => {
   const navigate = useNavigate();
   const tasks: Task[] = [];
 
-  if (daysPlanned === 0) {
+  // Primary task: meals to plan
+  if (mealsToplan > 0) {
+    tasks.push({
+      id: "meals-to-plan",
+      message: `🎯 Il manque ${mealsToplan} repas à planifier cette semaine`,
+      action: "Planifier",
+      route: "/planning",
+      icon: Target,
+      priority: "high",
+    });
+  } else if (daysPlanned === 0) {
     tasks.push({
       id: "no-planning",
-      message: "Aucun jour planifié cette semaine",
+      message: "🎯 Aucun repas planifié cette semaine",
       action: "Planifier",
       route: "/planning",
       icon: Calendar,
       priority: "high",
-    });
-  } else if (daysPlanned < totalDays) {
-    tasks.push({
-      id: "incomplete-planning",
-      message: `${totalDays - daysPlanned} jour(s) sans planning`,
-      action: "Compléter",
-      route: "/planning",
-      icon: Calendar,
-      priority: "medium",
     });
   }
 

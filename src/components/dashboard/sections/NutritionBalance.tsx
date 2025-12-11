@@ -59,7 +59,10 @@ export const NutritionBalance = ({
   return (
     <Card className="p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold text-sm">Nutrition</h3>
+        <div>
+          <h3 className="font-bold text-sm">Nutrition</h3>
+          <p className="text-[10px] text-muted-foreground">Analyse nutritionnelle de la semaine</p>
+        </div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${message.bg} ${message.color}`}>
           {message.text} {message.emoji}
         </span>
@@ -108,10 +111,6 @@ export const NutritionBalance = ({
           })}
         </div>
       </div>
-
-      <p className="text-[9px] text-muted-foreground text-center pt-1 border-t border-border/40">
-        Répartition basée sur les repas de la semaine
-      </p>
     </Card>
   );
 };

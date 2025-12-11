@@ -19,6 +19,7 @@ interface MealData {
   name: string | null;
   prepTime?: number;
   recipeId?: string;
+  difficulty?: string;
 }
 
 interface DashboardData {
@@ -51,7 +52,7 @@ export const useDashboardData = (userId: string) => {
 
   const getChildMealConfig = useCallback((child: Child): ChildMealConfig => {
     // Un enfant a un régime spécial s'il a des allergies
-    const hasSpecialDiet = Boolean(child.allergies && child.allergies.length > 0);
+    const hasSpecialDiet = Boolean(child.allergies && child.allergies.filter(a => a && a.trim() !== '').length > 0);
     
     // TODO: Ces valeurs devraient venir d'un calendrier ou des paramètres utilisateur
     return {
@@ -61,8 +62,8 @@ export const useDashboardData = (userId: string) => {
     };
   }, []);
 
-  const fetchDashboardData = useCallback(async (child: Child): Promise<DashboardData> => {
-    const today = new Date();
+  const fetchDashboardData = useCallback(async (child: Child, dateStr?: string): Promise<DashboardData> => {
+    const today = dateStr ? new Date(dateStr) : new Date();
     const todayStr = format(today, 'yyyy-MM-dd');
     
     // Get week boundaries
@@ -91,6 +92,7 @@ export const useDashboardData = (userId: string) => {
             id,
             name,
             preparation_time,
+            difficulty,
             nutritional_info
           )
         `)
@@ -101,10 +103,10 @@ export const useDashboardData = (userId: string) => {
 
       // 2. Get today's meals - structure avec 4 repas
       const todayMeals = {
-        breakfast: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
-        lunch: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
-        snack: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
-        dinner: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined },
+        breakfast: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined, difficulty: undefined as string | undefined },
+        lunch: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined, difficulty: undefined as string | undefined },
+        snack: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined, difficulty: undefined as string | undefined },
+        dinner: { name: null as string | null, prepTime: undefined as number | undefined, recipeId: undefined as string | undefined, difficulty: undefined as string | undefined },
       };
 
       if (mealPlans) {
@@ -124,6 +126,7 @@ export const useDashboardData = (userId: string) => {
                 name: plan.recipe.name,
                 prepTime: plan.recipe.preparation_time,
                 recipeId: plan.recipe.id,
+                difficulty: plan.recipe.difficulty,
               };
             }
           });
@@ -134,11 +137,8 @@ export const useDashboardData = (userId: string) => {
         ? [...new Set(mealPlans.map((p: any) => p.date))]
         : [];
 
-      // 4. Count total recipes for user
-      const { count: recipeCount } = await supabase
-        .from('recipes')
-        .select('*', { count: 'exact', head: true })
-        .eq('profile_id', userId);
+      // 4. Count total recipes for user (meals planned this week)
+      const recipesReady = mealPlans ? mealPlans.filter((p: any) => p.recipe).length : 0;
 
       // 5. Check shopping list
       const { data: shoppingList } = await supabase
@@ -195,8 +195,8 @@ export const useDashboardData = (userId: string) => {
         lunchType,
         plannedDays,
         stats: {
-          recipesReady: Math.min(recipeCount || 0, 7),
-          totalRecipes: 7,
+          recipesReady,
+          totalRecipes: 28, // 4 meals * 7 days
           daysPlanned: plannedDays.length,
           totalDays: 7,
           shoppingListReady: hasShoppingList,
@@ -216,7 +216,7 @@ export const useDashboardData = (userId: string) => {
         plannedDays: [],
         stats: {
           recipesReady: 0,
-          totalRecipes: 7,
+          totalRecipes: 28,
           daysPlanned: 0,
           totalDays: 7,
           shoppingListReady: false,
@@ -228,18 +228,19 @@ export const useDashboardData = (userId: string) => {
 
   const generateMeal = useCallback(async (
     child: Child, 
-    mealSlot: MealSlot
+    mealSlot: MealSlot,
+    dateStr?: string
   ): Promise<MealData | null> => {
     setGenerating(mealSlot);
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const targetDate = dateStr || format(new Date(), 'yyyy-MM-dd');
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-daily-meal', {
         body: {
           childId: child.id,
           profileId: userId,
-          mealType: mealSlot, // Utilise le nouveau système de slots
-          date: todayStr,
+          mealType: mealSlot,
+          date: targetDate,
         },
       });
 
@@ -251,6 +252,7 @@ export const useDashboardData = (userId: string) => {
           name: data.recipe.name,
           prepTime: data.recipe.preparation_time,
           recipeId: data.recipe.id,
+          difficulty: data.recipe.difficulty,
         };
       } else {
         throw new Error(data?.error || 'Erreur de génération');
