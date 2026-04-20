@@ -1,4 +1,3 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -7,73 +6,58 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { recipeName, ingredients } = await req.json();
-    
     if (!recipeName || !ingredients) {
-      throw new Error("Recipe name and ingredients are required");
-    }
-    
-    console.log('Generating image for recipe:', recipeName);
-    console.log('With ingredients:', ingredients);
-
-    const prompt = `A professional food photography shot of ${recipeName}, which is made with ${ingredients}. The photo should be a close-up, well-lit shot that clearly shows the dish described, styled like a professional cookbook photo. The image must accurately represent the dish name and ingredients.`;
-
-    const openAiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAiKey) {
-      throw new Error('OpenAI API key is missing');
+      throw new Error("recipeName et ingredients sont requis");
     }
 
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY non configurée');
+
+    const prompt = `Photographie culinaire professionnelle de "${recipeName}", préparée avec ${ingredients}. Cadrage rapproché, éclairage doux, style livre de cuisine, présentation appétissante adaptée aux enfants.`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAiKey}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "standard",
-        style: "natural",
+        model: 'google/gemini-2.5-flash-image-preview',
+        messages: [{ role: 'user', content: prompt }],
+        modalities: ['image', 'text'],
       }),
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      console.error('OpenAI API error:', error);
-      throw new Error(`OpenAI API error: ${error.error?.message || 'Unknown error'}`);
+      const errorText = await response.text();
+      if (response.status === 429) throw new Error("Trop de requêtes, réessayez dans un instant");
+      if (response.status === 402) throw new Error("Crédits Lovable AI insuffisants");
+      throw new Error(`Erreur Lovable AI (${response.status}): ${errorText}`);
     }
 
     const data = await response.json();
-    
-    if (!data.data?.[0]?.url) {
-      throw new Error('No image URL in OpenAI response');
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+    if (!imageUrl) {
+      console.error('No image in response:', JSON.stringify(data));
+      throw new Error("Aucune image générée");
     }
 
-    console.log('Successfully generated image URL:', data.data[0].url);
-
     return new Response(
-      JSON.stringify({ imageUrl: data.data[0].url }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      JSON.stringify({ imageUrl }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error) {
-    console.error('Error generating image:', error);
+  } catch (error: any) {
+    console.error('generate-recipe-image error:', error);
     return new Response(
-      JSON.stringify({ 
-        error: error.message,
-        details: error.stack 
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 500 
-      },
+      JSON.stringify({ error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
