@@ -23,7 +23,7 @@ export const AuthForm = () => {
     setGoogleLoading(true);
     try {
       const result = await lovable.auth.signInWithOAuth('google', {
-        redirect_uri: `${window.location.origin}/dashboard`,
+        redirect_uri: window.location.origin,
       });
 
       if (result.error) {
@@ -31,11 +31,12 @@ export const AuthForm = () => {
       }
 
       if (result.redirected) {
+        // Browser will redirect to Google — let it happen
         return;
       }
 
-      // Tokens received and session set — navigate to dashboard
-      window.location.href = '/dashboard';
+      // Tokens received and session set — let the router handle destination
+      window.location.href = '/';
     } catch (error: unknown) {
       console.error('Google auth error:', error);
       const message = error instanceof Error ? error.message : "Impossible de se connecter avec Google.";
