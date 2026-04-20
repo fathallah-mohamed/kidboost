@@ -569,6 +569,27 @@ IMPORTANT: Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans te
       throw new Error("Erreur lors de la sauvegarde de la recette");
     }
 
+    // Fire-and-forget: generate a realistic image for this recipe in the background
+    // The image function will update recipes.image_url when done.
+    if (savedRecipe?.id) {
+      const imagePromise = supabase.functions.invoke('generate-recipe-image', {
+        body: {
+          recipeId: savedRecipe.id,
+          recipeName: savedRecipe.name,
+          ingredients: savedRecipe.ingredients,
+        },
+      }).then(({ error }) => {
+        if (error) console.warn('Background image generation failed:', error);
+        else console.log('Background image generation queued for', savedRecipe.id);
+      }).catch((e) => console.warn('Image generation error:', e));
+
+      // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(imagePromise);
+      }
+    }
+
     // Create or update meal plan entry
     const { data: existingPlan } = await supabase
       .from('meal_plans')

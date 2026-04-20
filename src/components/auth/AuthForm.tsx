@@ -35,8 +35,8 @@ export const AuthForm = () => {
         return;
       }
 
-      // Tokens received and session set — let the router handle destination
-      window.location.href = '/';
+      // Tokens received and session set — go straight to dashboard
+      window.location.href = '/dashboard';
     } catch (error: unknown) {
       console.error('Google auth error:', error);
       const message = error instanceof Error ? error.message : "Impossible de se connecter avec Google.";

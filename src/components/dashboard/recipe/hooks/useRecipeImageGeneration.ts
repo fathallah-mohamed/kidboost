@@ -27,8 +27,9 @@ export const useRecipeImageGeneration = () => {
           return null;
         }
 
-        // Persister l'URL si la recette est déjà en DB (id valide UUID)
-        if (recipe.id) {
+        // Persister l'URL uniquement si l'ID est un vrai UUID (recette déjà en DB)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (recipe.id && uuidRegex.test(recipe.id)) {
           await supabase
             .from("recipes")
             .update({ image_url: data.imageUrl })
