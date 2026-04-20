@@ -70,7 +70,7 @@ export const HeroSection = () => {
           
           {!session && (
             <p className="text-sm text-muted-foreground animate-fade-in [animation-delay:400ms]">
-              <strong>Sans inscription obligatoire</strong> • Test gratuit
+              <strong>Inscription en 30 secondes</strong> • Sans engagement
             </p>
           )}
         </div>
