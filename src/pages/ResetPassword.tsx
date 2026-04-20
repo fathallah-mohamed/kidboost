@@ -16,8 +16,16 @@ const ResetPassword = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if we have a valid session from the reset link
-    const checkSession = async () => {
+    // Listen for the PASSWORD_RECOVERY event Supabase fires when the user
+    // arrives from the reset email link. Falls back to checking session after a delay.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+        // Valid recovery flow — stay on the page
+      }
+    });
+
+    // Safety check after 2s: if no session at all, redirect to login
+    const timeout = setTimeout(async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast({
@@ -27,8 +35,12 @@ const ResetPassword = () => {
         });
         navigate('/login');
       }
+    }, 2000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
     };
-    checkSession();
   }, [navigate, toast]);
 
   const handleReset = async (e: React.FormEvent) => {
