@@ -134,8 +134,7 @@ const AppRoutes = () => {
           )
         }
       >
-        <Route index element={<Navigate to="/dashboard/overview" />} />
-        <Route path="overview" element={<Dashboard session={session!} />} />
+        <Route index element={<Dashboard session={session!} />} />
         <Route path="recipes" element={<RecipeGenerator onSectionChange={() => {}} />} />
         <Route path="generate" element={<RecipeGeneratorPage />} />
         <Route path="generate-recipes" element={<RecipeGeneratorPage />} />
