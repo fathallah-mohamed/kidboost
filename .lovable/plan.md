@@ -1,72 +1,95 @@
 
 
-# Plan : Générer une image réaliste pour chaque recette
+# Plan : Tests E2E + corrections des anomalies trouvées
 
-## Constat
-- L'edge function `generate-recipe-image` existe déjà et utilise Lovable AI (Nano Banana / `google/gemini-2.5-flash-image-preview`)
-- Mais elle n'est **jamais appelée** dans le flux de génération
-- Toutes les recettes héritent d'une image Unsplash générique (`photo-1618160702438-9b02ab6515c9`)
+## Méthode
+Audit du code des parcours critiques (auth, onboarding, dashboard, génération recette, planning, courses) pour identifier les bugs avant test navigateur. Puis test E2E réel pour valider.
 
-## Solution
+## Anomalies détectées (par sévérité)
 
-### 1. Stockage des images générées
-Créer un bucket Storage public `recipe-images` pour héberger les PNG générés (les data:base64 sont trop lourds pour la DB, et un URL stable permet le cache navigateur).
+### 🔴 Critique — Image générée perdue à la sauvegarde
+Dans `RecipeGeneratorPage.tsx`, les recettes générées ont un `id` temporaire de l'IA. `useRecipeImageGeneration` upload l'image avec ce nom et fait un `UPDATE recipes SET image_url WHERE id = tempId` qui ne matche **rien** (la recette n'existe pas encore en DB tant qu'elle n'est pas favorite). Quand l'utilisateur sauvegarde la recette, elle reçoit un **nouveau** UUID DB → l'image_url n'est jamais persistée.
 
-- Bucket public en lecture (les images de recettes ne sont pas sensibles)
-- Policies : insert authentifié, select public
+**Fix** : 
+- Stocker `image_url` dans le state local et le passer à `saveRecipe` au moment de la sauvegarde
+- Modifier `useRecipeSaving` pour inclure `image_url` dans l'INSERT
+- Ne tenter l'UPDATE en DB que si la recette est déjà sauvegardée (présente dans `savedRecipes`)
 
-### 2. Améliorer `generate-recipe-image`
-- Conserver l'appel actuel à Nano Banana
-- **Nouveau** : décoder le base64 retourné, uploader dans `recipe-images/{recipeId}.png`, retourner l'URL publique stable au lieu du data URI
-- Améliorer le prompt : "photographie culinaire réaliste, vue de dessus 3/4, assiette enfant colorée, lumière naturelle douce, fond bois clair, style food photography pro, appétissant"
+### 🔴 Critique — Redirect Google OAuth incorrect
+`AuthForm.handleGoogleLogin` fait `window.location.href = '/'` après succès. La home page n'auto-redirige pas vers `/dashboard` (il faut cliquer sur le bouton). De plus, le rechargement complet de la page interrompt la session juste établie.
 
-### 3. Intégrer dans le flux de génération
-Deux options techniquement viables — **je recommande l'option B** (parallèle côté client) :
+**Fix** : remplacer par `window.location.href = '/dashboard'` (ou laisser le router gérer via `<Navigate>` car `/login` redirige déjà vers `/dashboard` quand session existe).
 
-**Option A** (côté serveur dans `generate-recipe`) : génère les 5 images avant de répondre → bloque l'utilisateur 30-60s, risque de timeout
+### 🟠 Moyen — Race condition `/reset-password`
+Quand l'utilisateur arrive depuis l'email, `checkSession` s'exécute avant que Supabase ait fini de poser la session token → faux négatif → redirige vers `/login` à tort.
 
-**Option B** (côté client, parallèle, progressif) ✅ :
-- `generate-recipe` retourne les 5 recettes immédiatement avec un placeholder
-- Au retour côté client, on lance 5 appels parallèles à `generate-recipe-image` (un par recette)
-- Chaque image arrive indépendamment → mise à jour progressive de la carte recette
-- Skeleton/spinner sur l'image en attendant
-- Sauvegarde de la recette mise à jour quand l'image arrive
+**Fix** : écouter `onAuthStateChange` (`PASSWORD_RECOVERY` event) au lieu d'appeler `getSession()` immédiatement.
 
-### 4. UI : feedback visuel
-- `RecipeCard.tsx` et `recipe-card/RecipeHeader.tsx` :
-  - État `imageLoading` : skeleton animé (couleur cream) à la place de l'image
-  - Fade-in doux quand l'image arrive (`transition-opacity duration-500`)
-  - Fallback image générique si la génération échoue (silencieux, pas de toast)
+### 🟠 Moyen — Texte trompeur "Sans inscription obligatoire"
+`HeroSection.tsx` affiche "Sans inscription obligatoire • Test gratuit" alors que toutes les fonctionnalités exigent un compte.
 
-### 5. Hook dédié
-Créer `src/components/dashboard/recipe/hooks/useRecipeImageGeneration.ts` :
-- `generateImageForRecipe(recipe)` → appelle l'edge function, met à jour la recette dans le state, persiste l'URL dans la table `recipes`
-- Géré en arrière-plan, ne bloque jamais l'affichage
+**Fix** : remplacer par "Inscription en 30 secondes • Sans engagement".
+
+### 🟡 Mineur — Route `/dashboard/overview` morte
+Le nested route `<Route path="overview" element={<Dashboard session={...} />} />` n'est jamais rendu (parent Dashboard renvoie WelcomeSection avant l'`<Outlet />`). Pas de bug fonctionnel mais code mort qui pourrait causer des récursions si modifié.
+
+**Fix** : retirer la nested route `overview`.
+
+### 🟡 Mineur — Type `Recipe.instructions`
+Type TS déclare `instructions: string[]` mais la DB stocke un `text` (string). Tous les composants traitent comme string avec `.split('\n')`. Le type est mensonger.
+
+**Fix** : changer le type en `string`.
+
+### 🟡 Mineur — Doublon `useShoppingList`
+Deux versions du hook : `shopping/useShoppingList.ts` (ancienne, signature simple) et `shopping/hooks/useShoppingList.ts` (nouvelle, avec ingrédients). Risque d'import incorrect.
+
+**Fix** : supprimer le fichier ancien `shopping/useShoppingList.ts` et migrer le seul consommateur (`Dashboard/ShoppingList.tsx`) vers la version moderne.
+
+## Ordre des corrections
+
+1. Fix image_url perdue (le plus impactant après le travail récent)
+2. Fix redirect Google OAuth
+3. Fix race `/reset-password`
+4. Fix texte HeroSection
+5. Nettoyer route morte `/dashboard/overview`
+6. Corriger type `Recipe.instructions`
+7. Supprimer doublon `useShoppingList`
+
+## Test E2E final (après corrections)
+
+Lancer le browser tool et dérouler le scénario complet :
+
+```text
+1. Page d'accueil (déconnecté) → vérifier CTA + texte sans "obligatoire"
+2. /signup → créer compte → atterrir sur /onboarding
+3. Compléter les 6 étapes → arriver sur /dashboard/overview
+4. Cliquer "Voir fiche enfant" → naviguer vers /profile-settings
+5. Retour dashboard → cliquer "Recettes" → /recipes
+6. /dashboard/generate → sélectionner enfant → générer 3 recettes
+   → vérifier que skeleton image apparaît, puis image réelle
+7. Sauvegarder une recette favorite → recharger → image toujours présente ✅
+8. /planning → ajouter une recette à un slot
+9. /shopping-list → vérifier les ingrédients
+10. Déconnexion → retour /
+```
 
 ## Fichiers touchés
 
 **Modifiés :**
-- `supabase/functions/generate-recipe-image/index.ts` — upload Storage + URL publique + meilleur prompt
-- `src/components/dashboard/recipe/hooks/useRecipeGeneration.ts` — déclenche les générations d'images en parallèle après le retour
-- `src/components/dashboard/recipe/recipe-card/RecipeHeader.tsx` — skeleton + fade-in
-- `src/components/dashboard/recipe/RecipeCard.tsx` — état `imageLoading`
-
-**Créés :**
+- `src/components/dashboard/recipe/RecipeGeneratorPage.tsx`
 - `src/components/dashboard/recipe/hooks/useRecipeImageGeneration.ts`
-- Migration SQL : bucket `recipe-images` + policies RLS storage
+- `src/components/dashboard/recipe/hooks/useRecipeSaving.ts` (ou `useRecipeSavingLogic.ts`)
+- `src/components/auth/AuthForm.tsx`
+- `src/pages/ResetPassword.tsx`
+- `src/components/home/HeroSection.tsx`
+- `src/App.tsx` (retrait route `overview`)
+- `src/components/dashboard/types/recipe.ts` (type instructions)
+- `src/components/dashboard/ShoppingList.tsx` (changement d'import)
 
-## Coût et performance
-
-- Nano Banana ≈ 0.04€ par image, 5 recettes = ~0.20€ par génération de lot
-- Génération d'image : 5-10s par recette en parallèle → toutes prêtes en ~10s max
-- L'utilisateur voit les recettes immédiatement (texte) puis les images apparaissent une à une
+**Supprimé :**
+- `src/components/dashboard/shopping/useShoppingList.ts` (doublon)
 
 ## Vérification
 
-```text
-1. Génère 5 recettes → cartes apparaissent immédiatement avec skeleton image
-2. ~10s plus tard → 5 images photo-réalistes apparaissent une à une (fade-in)
-3. Sauvegarde recette favorite → image persiste sur rechargement
-4. Si une image échoue → fallback Unsplash, pas d'erreur bloquante
-```
+Après les fixes, lancer le test browser end-to-end pour confirmer que chaque étape passe sans erreur console et que l'image générée persiste après sauvegarde.
 
