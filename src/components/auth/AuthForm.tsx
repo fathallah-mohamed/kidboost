@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable';
 import { AuthError } from '@supabase/supabase-js';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
 import { Separator } from "@/components/ui/separator";
@@ -21,21 +22,27 @@ export const AuthForm = () => {
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
+      const result = await lovable.auth.signInWithOAuth('google', {
+        redirect_uri: `${window.location.origin}/dashboard`,
       });
 
-      if (error) throw error;
+      if (result.error) {
+        throw result.error;
+      }
+
+      if (result.redirected) {
+        return;
+      }
+
+      // Tokens received and session set — navigate to dashboard
+      window.location.href = '/dashboard';
     } catch (error: unknown) {
       console.error('Google auth error:', error);
-      const authError = error as AuthError;
+      const message = error instanceof Error ? error.message : "Impossible de se connecter avec Google.";
       toast({
         variant: "destructive",
         title: "Erreur de connexion Google",
-        description: authError.message || "Impossible de se connecter avec Google.",
+        description: message,
       });
     } finally {
       setGoogleLoading(false);
