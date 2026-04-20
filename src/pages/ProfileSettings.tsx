@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAIProvider } from "@/hooks/useAIProvider";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -128,6 +130,7 @@ const ProfileSettings = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const session = useSession();
+  const { aiProvider, setAIProvider } = useAIProvider();
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
