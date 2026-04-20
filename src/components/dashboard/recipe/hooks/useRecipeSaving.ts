@@ -51,7 +51,7 @@ export const useRecipeSaving = () => {
 
       const { error } = await supabase
         .from('recipes')
-        .insert(recipeToSave);
+        .insert([recipeToSave]);
 
       if (error) throw error;
 
