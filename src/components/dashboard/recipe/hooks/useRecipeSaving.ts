@@ -44,7 +44,9 @@ export const useRecipeSaving = () => {
           : recipe.instructions,
         nutritional_info: nutritionalInfo,
         health_benefits: healthBenefits,
-        cooking_steps: recipe.cooking_steps || []
+        cooking_steps: recipe.cooking_steps || [],
+        // Preserve AI-generated image URL if present
+        image_url: recipe.image_url || undefined,
       };
 
       console.log('Saving recipe with data:', recipeToSave);
