@@ -344,129 +344,166 @@ ${busyParentMode ? '- OBLIGATOIRE: Indique comment conserver et combien de fois 
     console.log("Excluding recipes:", recipesToExclude.slice(0, 5).join(", "), recipesToExclude.length > 5 ? `... and ${recipesToExclude.length - 5} more` : "");
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
+    const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+
+    if (provider === 'lovable' && !LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');
     }
-
-    console.log("Calling AI with prompt:", prompt.substring(0, 500) + "...");
-
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `Tu es un chef cuisinier créatif spécialisé dans les repas pour enfants.
-
-RÈGLES ABSOLUES:
-1. Chaque recette doit être UNIQUE - ne jamais proposer deux fois le même plat
-2. Les noms de recettes doivent être FUN et ORIGINAUX pour plaire aux enfants
-3. RESPECTER ABSOLUMENT les allergies et restrictions mentionnées
-4. Utiliser les ingrédients de SAISON quand mentionnés
-5. Adapter la difficulté et le temps de préparation aux contraintes données
-6. Privilégier les aliments que l'enfant AIME et éviter ceux qu'il n'aime pas
-
-Tu retournes UNIQUEMENT le résultat via l'outil create_recipe. Sois créatif dans les noms!`
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "create_recipe",
-            description: "Crée une recette adaptée à l'enfant avec infos de conservation",
-            parameters: {
-              type: "object",
-              properties: {
-                name: { type: "string", description: "Nom de la recette (appétissant pour un enfant)" },
-                ingredients: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      item: { type: "string" },
-                      quantity: { type: "string" },
-                      unit: { type: "string" }
-                    },
-                    required: ["item", "quantity", "unit"]
-                  }
-                },
-                instructions: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "Étapes de préparation claires et simples"
-                },
-                preparation_time: { type: "number", description: "Temps en minutes" },
-                nutritional_info: {
-                  type: "object",
-                  properties: {
-                    calories: { type: "number" },
-                    protein: { type: "number" },
-                    carbs: { type: "number" },
-                    fat: { type: "number" },
-                    fiber: { type: "number" }
-                  }
-                },
-                tips: { type: "string", description: "Conseil pour les parents" },
-                reuse_info: {
-                  type: "object",
-                  description: "Infos de réutilisation pour parents pressés",
-                  properties: {
-                    total_uses: { type: "number", description: "Nombre de fois que cette recette peut servir (2-4)" },
-                    best_days: { type: "array", items: { type: "string" }, description: "Meilleurs jours pour réutiliser (J+1, J+2, etc)" },
-                    reuse_tips: { type: "string", description: "Conseils pour réutiliser (réchauffer, manger froid, etc)" }
-                  }
-                },
-                storage_info: {
-                  type: "object",
-                  description: "Comment conserver cette préparation",
-                  properties: {
-                    method: { type: "string", enum: ["fridge", "freezer", "room_temp"], description: "Méthode de conservation" },
-                    duration_days: { type: "number", description: "Durée de conservation en jours" },
-                    container: { type: "string", description: "Type de contenant recommandé" },
-                    tips: { type: "string", description: "Conseils de conservation" }
-                  }
-                },
-                is_batch_cooking: { type: "boolean", description: "Si cette recette est adaptée au batch cooking" },
-                portion_usage_estimate: { type: "number", description: "Combien de fois ce plat peut être servi (1-4). Ex: cake=3, gratin=2, salade=1" }
-              },
-              required: ["name", "ingredients", "instructions", "preparation_time", "nutritional_info", "portion_usage_estimate"]
-            }
-          }
-        }],
-        tool_choice: { type: "function", function: { name: "create_recipe" } }
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI Gateway error:", aiResponse.status, errorText);
-      if (aiResponse.status === 429) {
-        throw new Error("Trop de requêtes, réessayez dans quelques instants");
-      }
-      if (aiResponse.status === 402) {
-        throw new Error("Crédits IA insuffisants, veuillez recharger");
-      }
-      throw new Error(`Erreur IA: ${aiResponse.status}`);
+    if (provider === 'perplexity' && !PERPLEXITY_API_KEY) {
+      throw new Error("Perplexity n'est pas configuré. Connectez Perplexity dans les paramètres ou choisissez Lovable AI.");
     }
 
-    const aiData = await aiResponse.json();
-    console.log("AI Response received");
+    console.log(`Calling AI provider: ${provider}`);
 
-    let recipeData;
-    if (aiData.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments) {
-      recipeData = JSON.parse(aiData.choices[0].message.tool_calls[0].function.arguments);
+    const systemPrompt = `Tu es un chef cuisinier créatif spécialisé dans les repas pour enfants.
+
+RÈGLES ABSOLUES:
+1. Chaque recette doit être UNIQUE
+2. Les noms de recettes doivent être FUN et ORIGINAUX
+3. RESPECTER ABSOLUMENT les allergies et restrictions
+4. Utiliser les ingrédients de SAISON
+5. Adapter difficulté et temps de préparation aux contraintes
+6. Privilégier les aliments aimés et éviter ceux non aimés`;
+
+    let recipeData: any;
+
+    if (provider === 'perplexity') {
+      const jsonPrompt = `${prompt}
+
+IMPORTANT: Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte autour. Format:
+{
+  "name": "...",
+  "ingredients": [{"item":"...","quantity":"...","unit":"..."}],
+  "instructions": ["..."],
+  "preparation_time": 20,
+  "nutritional_info": {"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0},
+  "tips": "...",
+  "reuse_info": {"total_uses": 2, "best_days": ["J+1"], "reuse_tips": "..."},
+  "storage_info": {"method": "fridge", "duration_days": 2, "container": "...", "tips": "..."},
+  "is_batch_cooking": false,
+  "portion_usage_estimate": 2
+}`;
+
+      const ppxResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'sonar',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: jsonPrompt }
+          ],
+          temperature: 0.7,
+        }),
+      });
+
+      if (!ppxResponse.ok) {
+        const errorText = await ppxResponse.text();
+        throw new Error(`Erreur Perplexity (${ppxResponse.status}): ${errorText}`);
+      }
+      const ppxData = await ppxResponse.json();
+      const content = ppxData.choices?.[0]?.message?.content || '';
+      const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const jsonText = (fenced ? fenced[1] : content).match(/\{[\s\S]*\}/)?.[0] || content;
+      try {
+        recipeData = JSON.parse(jsonText);
+      } catch {
+        console.error("Perplexity raw content:", content);
+        throw new Error("Réponse Perplexity non parsable");
+      }
     } else {
-      console.error("Invalid AI response structure:", JSON.stringify(aiData, null, 2));
-      throw new Error("Réponse IA invalide, veuillez réessayer");
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt + "\n\nTu retournes UNIQUEMENT le résultat via l'outil create_recipe." },
+            { role: 'user', content: prompt }
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "create_recipe",
+              description: "Crée une recette adaptée à l'enfant avec infos de conservation",
+              parameters: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  ingredients: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item: { type: "string" },
+                        quantity: { type: "string" },
+                        unit: { type: "string" }
+                      },
+                      required: ["item", "quantity", "unit"]
+                    }
+                  },
+                  instructions: { type: "array", items: { type: "string" } },
+                  preparation_time: { type: "number" },
+                  nutritional_info: {
+                    type: "object",
+                    properties: {
+                      calories: { type: "number" },
+                      protein: { type: "number" },
+                      carbs: { type: "number" },
+                      fat: { type: "number" },
+                      fiber: { type: "number" }
+                    }
+                  },
+                  tips: { type: "string" },
+                  reuse_info: {
+                    type: "object",
+                    properties: {
+                      total_uses: { type: "number" },
+                      best_days: { type: "array", items: { type: "string" } },
+                      reuse_tips: { type: "string" }
+                    }
+                  },
+                  storage_info: {
+                    type: "object",
+                    properties: {
+                      method: { type: "string", enum: ["fridge", "freezer", "room_temp"] },
+                      duration_days: { type: "number" },
+                      container: { type: "string" },
+                      tips: { type: "string" }
+                    }
+                  },
+                  is_batch_cooking: { type: "boolean" },
+                  portion_usage_estimate: { type: "number" }
+                },
+                required: ["name", "ingredients", "instructions", "preparation_time", "nutritional_info", "portion_usage_estimate"]
+              }
+            }
+          }],
+          tool_choice: { type: "function", function: { name: "create_recipe" } }
+        }),
+      });
+
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error("AI Gateway error:", aiResponse.status, errorText);
+        if (aiResponse.status === 429) throw new Error("Trop de requêtes, réessayez dans quelques instants");
+        if (aiResponse.status === 402) throw new Error("Crédits IA insuffisants, veuillez recharger");
+        throw new Error(`Erreur IA: ${aiResponse.status}`);
+      }
+
+      const aiData = await aiResponse.json();
+      if (aiData.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments) {
+        recipeData = JSON.parse(aiData.choices[0].message.tool_calls[0].function.arguments);
+      } else {
+        console.error("Invalid AI response structure:", JSON.stringify(aiData, null, 2));
+        throw new Error("Réponse IA invalide, veuillez réessayer");
+      }
     }
 
     // Calculer portion_usage_estimate et repeat_count
