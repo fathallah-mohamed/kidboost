@@ -13,9 +13,9 @@ interface LogoProps {
 }
 
 const sizeMap: Record<LogoSize, { img: string; text: string; padding: string; gap: string }> = {
-  sm: { img: 'h-8 w-8', text: 'text-base', padding: 'p-1.5', gap: 'gap-2' },
-  md: { img: 'h-12 w-12', text: 'text-xl', padding: 'p-2', gap: 'gap-2.5' },
-  lg: { img: 'h-20 w-20', text: 'text-3xl', padding: 'p-3', gap: 'gap-3' },
+  sm: { img: 'h-8 w-auto', text: 'text-base', padding: 'p-1.5', gap: 'gap-2' },
+  md: { img: 'h-12 w-auto', text: 'text-xl', padding: 'p-2', gap: 'gap-2.5' },
+  lg: { img: 'h-20 w-auto', text: 'text-3xl', padding: 'p-3', gap: 'gap-3' },
 };
 
 /**
@@ -55,7 +55,8 @@ export const Logo = ({
       ) : (
         image
       )}
-      {withText && (
+      {/* withText is intentionally ignored — the logo asset already contains the "Kidboost" wordmark */}
+      {withText && false && (
         <span className={cn('font-extrabold tracking-tight text-primary', s.text)}>
           Kidboost
         </span>
