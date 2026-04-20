@@ -297,6 +297,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          ai_provider: string
           created_at: string
           id: string
           onboarding_completed: boolean | null
@@ -304,6 +305,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_provider?: string
           created_at?: string
           id: string
           onboarding_completed?: boolean | null
@@ -311,6 +313,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_provider?: string
           created_at?: string
           id?: string
           onboarding_completed?: boolean | null
