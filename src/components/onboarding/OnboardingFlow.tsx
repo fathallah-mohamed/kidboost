@@ -60,6 +60,17 @@ export const OnboardingFlow = ({ userId, onComplete }: OnboardingFlowProps) => {
     }
   };
 
+  const handleCancelAndLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success('Déconnexion réussie');
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Erreur lors de la déconnexion');
+    }
+  };
+
   const handleComplete = async () => {
     if (!data.name || !data.birthDate) {
       toast.error('Veuillez remplir tous les champs obligatoires');
