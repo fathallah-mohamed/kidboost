@@ -1,51 +1,72 @@
 
 
-# Plan : Remplacer le logo par la version propre fournie
+# Plan : Générer une image réaliste pour chaque recette
 
-## Diagnostic
-La capture d'écran montre que le PNG actuel (`src/assets/kidboost-logo.png`) **contient le motif damier comme vrais pixels** — ce n'est pas de la vraie transparence. Même posé sur un badge blanc, le damier reste visible parce qu'il fait partie de l'image.
-
-L'image fournie en upload (`1776689229501.png`) est le vrai logo Kidboost avec une **véritable transparence alpha** (le damier qu'on voit est l'indicateur de transparence du visualiseur, pas des pixels).
+## Constat
+- L'edge function `generate-recipe-image` existe déjà et utilise Lovable AI (Nano Banana / `google/gemini-2.5-flash-image-preview`)
+- Mais elle n'est **jamais appelée** dans le flux de génération
+- Toutes les recettes héritent d'une image Unsplash générique (`photo-1618160702438-9b02ab6515c9`)
 
 ## Solution
 
-### 1. Remplacer l'asset source
-- Copier `user-uploads://1776689229501.png` → `src/assets/kidboost-logo.png` (écrase l'ancien fichier corrompu)
-- Tous les composants qui importent `@/assets/kidboost-logo.png` bénéficient automatiquement du nouveau visuel sans changement de code
+### 1. Stockage des images générées
+Créer un bucket Storage public `recipe-images` pour héberger les PNG générés (les data:base64 sont trop lourds pour la DB, et un URL stable permet le cache navigateur).
 
-### 2. Régénérer les favicons et icônes PWA depuis le bon source
-À partir du nouveau PNG transparent, regénérer (script Node + sharp, fond blanc carré aplati) :
-- `public/favicon-16.png` (16×16)
-- `public/favicon-32.png` (32×32)
-- `public/apple-touch-icon.png` (180×180, fond blanc, padding 10%)
-- `public/icon-192.png` (192×192, fond blanc, padding 10%)
-- `public/icon-512.png` (512×512, fond blanc, padding 10%)
+- Bucket public en lecture (les images de recettes ne sont pas sensibles)
+- Policies : insert authentifié, select public
 
-### 3. Ajuster le composant `Logo.tsx`
-Le badge blanc reste utile sur les fonds cream/colorés, mais maintenant que le logo a une vraie transparence il doit aussi pouvoir s'afficher **sans badge** proprement (ex: directement sur un fond blanc). Pas de changement de code nécessaire — `badge={false}` existe déjà.
+### 2. Améliorer `generate-recipe-image`
+- Conserver l'appel actuel à Nano Banana
+- **Nouveau** : décoder le base64 retourné, uploader dans `recipe-images/{recipeId}.png`, retourner l'URL publique stable au lieu du data URI
+- Améliorer le prompt : "photographie culinaire réaliste, vue de dessus 3/4, assiette enfant colorée, lumière naturelle douce, fond bois clair, style food photography pro, appétissant"
 
-Vérifier que le padding du badge est suffisant pour que le mot "Kidboost" du logo respire bien.
+### 3. Intégrer dans le flux de génération
+Deux options techniquement viables — **je recommande l'option B** (parallèle côté client) :
 
-### 4. Nettoyer
-- Supprimer `src/assets/kidboost-logo-clean.png` (créé lors de la tentative précédente, plus utilisé)
+**Option A** (côté serveur dans `generate-recipe`) : génère les 5 images avant de répondre → bloque l'utilisateur 30-60s, risque de timeout
+
+**Option B** (côté client, parallèle, progressif) ✅ :
+- `generate-recipe` retourne les 5 recettes immédiatement avec un placeholder
+- Au retour côté client, on lance 5 appels parallèles à `generate-recipe-image` (un par recette)
+- Chaque image arrive indépendamment → mise à jour progressive de la carte recette
+- Skeleton/spinner sur l'image en attendant
+- Sauvegarde de la recette mise à jour quand l'image arrive
+
+### 4. UI : feedback visuel
+- `RecipeCard.tsx` et `recipe-card/RecipeHeader.tsx` :
+  - État `imageLoading` : skeleton animé (couleur cream) à la place de l'image
+  - Fade-in doux quand l'image arrive (`transition-opacity duration-500`)
+  - Fallback image générique si la génération échoue (silencieux, pas de toast)
+
+### 5. Hook dédié
+Créer `src/components/dashboard/recipe/hooks/useRecipeImageGeneration.ts` :
+- `generateImageForRecipe(recipe)` → appelle l'edge function, met à jour la recette dans le state, persiste l'URL dans la table `recipes`
+- Géré en arrière-plan, ne bloque jamais l'affichage
 
 ## Fichiers touchés
 
-**Remplacés (binaires) :**
-- `src/assets/kidboost-logo.png` ← nouveau logo transparent propre
-- `public/favicon-16.png`, `public/favicon-32.png`
-- `public/apple-touch-icon.png`, `public/icon-192.png`, `public/icon-512.png`
+**Modifiés :**
+- `supabase/functions/generate-recipe-image/index.ts` — upload Storage + URL publique + meilleur prompt
+- `src/components/dashboard/recipe/hooks/useRecipeGeneration.ts` — déclenche les générations d'images en parallèle après le retour
+- `src/components/dashboard/recipe/recipe-card/RecipeHeader.tsx` — skeleton + fade-in
+- `src/components/dashboard/recipe/RecipeCard.tsx` — état `imageLoading`
 
-**Supprimés :**
-- `src/assets/kidboost-logo-clean.png` (orphelin)
+**Créés :**
+- `src/components/dashboard/recipe/hooks/useRecipeImageGeneration.ts`
+- Migration SQL : bucket `recipe-images` + policies RLS storage
 
-**Inchangés :**
-- `src/components/ui/Logo.tsx` (le composant fonctionne déjà bien, c'était l'asset le problème)
-- Tous les fichiers utilisant `<Logo />` (Index, Auth, AuthForm, DashboardHeader)
-- `index.html`, `public/site.webmanifest`
+## Coût et performance
+
+- Nano Banana ≈ 0.04€ par image, 5 recettes = ~0.20€ par génération de lot
+- Génération d'image : 5-10s par recette en parallèle → toutes prêtes en ~10s max
+- L'utilisateur voit les recettes immédiatement (texte) puis les images apparaissent une à une
 
 ## Vérification
-1. Page d'accueil mobile → logo net dans le badge blanc, **sans damier visible**
-2. Favicon onglet navigateur → mascotte Kidboost orange visible
-3. Ajout à l'écran d'accueil Android → icône carrée blanche avec mascotte centrée
+
+```text
+1. Génère 5 recettes → cartes apparaissent immédiatement avec skeleton image
+2. ~10s plus tard → 5 images photo-réalistes apparaissent une à une (fade-in)
+3. Sauvegarde recette favorite → image persiste sur rechargement
+4. Si une image échoue → fallback Unsplash, pas d'erreur bloquante
+```
 
