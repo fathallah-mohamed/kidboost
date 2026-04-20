@@ -1,7 +1,7 @@
 import { AuthForm } from "@/components/auth/AuthForm";
 import { SEOHead } from "@/components/seo/SEOHead";
 import { Link, useLocation } from "react-router-dom";
-import kidboostLogo from '@/assets/kidboost-logo.png';
+
 
 const Auth = () => {
   const location = useLocation();

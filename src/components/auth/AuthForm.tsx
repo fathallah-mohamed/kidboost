@@ -8,7 +8,7 @@ import { lovable } from '@/integrations/lovable';
 import { AuthError } from '@supabase/supabase-js';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
 import { Separator } from "@/components/ui/separator";
-import kidboostLogo from '@/assets/kidboost-logo.png';
+import { Logo } from '@/components/ui/Logo';
 
 export const AuthForm = () => {
   const [email, setEmail] = useState('');
@@ -135,7 +135,7 @@ export const AuthForm = () => {
   return (
     <Card className="p-6 w-full max-w-md mx-auto">
       <div className="flex justify-center mb-4">
-        <img src={kidboostLogo} alt="Kidboost" className="h-16 w-auto" />
+        <Logo size="lg" priority />
       </div>
       <h2 className="text-2xl font-bold text-center mb-6">
         {isSignUp ? 'Créer un compte' : 'Se connecter'}
