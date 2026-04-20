@@ -12,6 +12,7 @@ import { GenerationSection } from './sections/GenerationSection';
 import { ResultsSection } from './sections/ResultsSection';
 import { useRecipeQuery } from './hooks/useRecipeQuery';
 import { useRecipeGeneration } from './hooks/useRecipeGeneration';
+import { useRecipeImageGeneration } from './hooks/useRecipeImageGeneration';
 import { useRecipeSaving } from './hooks/useRecipeSaving';
 import { Button } from '@/components/ui/button';
 import { useRecipeFilters } from './hooks/useRecipeFilters';
@@ -29,6 +30,7 @@ export const RecipeGeneratorPage = () => {
   const filters = useRecipeFilters();
   const { ref: loadMoreRef, inView } = useInView();
   const { generateRecipes } = useRecipeGeneration();
+  const { generateImagesForAll } = useRecipeImageGeneration();
   const { saveRecipe } = useRecipeSaving();
 
   const { data: savedRecipes = [], refetch } = useRecipeQuery(
@@ -68,9 +70,21 @@ export const RecipeGeneratorPage = () => {
         throw new Error("Aucune recette n'a été générée");
       }
 
-      setGeneratedRecipes(newRecipes);
-      toast.success("Recettes générées avec succès !");
-      
+      // Marquer les recettes comme étant en attente d'image
+      const recipesWithLoadingImage = newRecipes.map((r) => ({
+        ...r,
+        image_url: undefined as any,
+      }));
+      setGeneratedRecipes(recipesWithLoadingImage);
+      toast.success("Recettes générées ! Les images arrivent...");
+
+      // Lancer la génération d'images en arrière-plan (non bloquant)
+      generateImagesForAll(newRecipes, (recipeId, imageUrl) => {
+        setGeneratedRecipes((current) =>
+          current.map((r) => (r.id === recipeId ? { ...r, image_url: imageUrl } : r))
+        );
+      }).catch((err) => console.warn("Background image generation failed:", err));
+
     } catch (error) {
       console.error('Error generating recipes:', error);
       const errorMessage = error instanceof Error ? error.message : "Une erreur est survenue";

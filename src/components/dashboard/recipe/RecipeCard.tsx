@@ -58,14 +58,25 @@ export const RecipeCard = ({ recipe, isPlanned, onAdd }: RecipeCardProps) => {
     }
   };
 
+  const hasImage = !!recipe.image_url;
+
   return (
     <Card className="overflow-hidden">
-      <div className="relative">
-        <img 
-          src={recipe.image_url} 
-          alt={recipe.name}
-          className="w-full h-48 object-cover"
-        />
+      <div className="relative bg-muted">
+        {hasImage ? (
+          <img 
+            src={recipe.image_url} 
+            alt={recipe.name}
+            className="w-full h-48 object-cover transition-opacity duration-500 opacity-100"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618160702438-9b02ab6515c9';
+            }}
+          />
+        ) : (
+          <div className="w-full h-48 animate-pulse bg-gradient-to-br from-muted via-muted/70 to-muted flex items-center justify-center">
+            <span className="text-xs text-muted-foreground">Génération de l'image…</span>
+          </div>
+        )}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
           <div className="flex items-center gap-2 text-white">
             <Clock className="w-4 h-4" />
