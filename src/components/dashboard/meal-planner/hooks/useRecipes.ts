@@ -18,7 +18,7 @@ export const useRecipes = (userId: string) => {
 
       if (error) throw error;
 
-      setRecipes((data || []).map(recipe => ({
+      setRecipes((data || []).map((recipe: any) => ({
         ...recipe,
         ingredients: typeof recipe.ingredients === 'string'
           ? JSON.parse(recipe.ingredients)
