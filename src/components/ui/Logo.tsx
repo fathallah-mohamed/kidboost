@@ -55,7 +55,8 @@ export const Logo = ({
       ) : (
         image
       )}
-      {withText && (
+      {/* withText is intentionally ignored — the logo asset already contains the "Kidboost" wordmark */}
+      {withText && false && (
         <span className={cn('font-extrabold tracking-tight text-primary', s.text)}>
           Kidboost
         </span>
