@@ -41,7 +41,7 @@ export interface Recipe {
   profile_id: string;
   name: string;
   ingredients: RecipeIngredient[];
-  instructions: string[];
+  instructions: string;
   nutritional_info: NutritionalInfo;
   meal_type: MealType;
   preparation_time: number;
