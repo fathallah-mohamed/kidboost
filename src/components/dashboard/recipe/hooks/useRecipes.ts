@@ -32,7 +32,7 @@ export const useRecipes = (userId: string) => {
         return;
       }
 
-      const parsedRecipes = data.map(recipe => ({
+      const parsedRecipes = (data as any[]).map((recipe: any) => ({
         ...recipe,
         ingredients: typeof recipe.ingredients === 'string' 
           ? JSON.parse(recipe.ingredients)

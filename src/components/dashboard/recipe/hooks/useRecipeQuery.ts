@@ -54,7 +54,7 @@ export const useRecipeQuery = (userId: string | undefined, filters: RecipeFilter
 
       console.log('Raw recipes data:', data);
 
-      const parsedRecipes = data.map(recipe => ({
+      const parsedRecipes = (data as any[]).map((recipe: any) => ({
         ...recipe,
         meal_type: recipe.meal_type as MealType,
         ingredients: typeof recipe.ingredients === 'string' 

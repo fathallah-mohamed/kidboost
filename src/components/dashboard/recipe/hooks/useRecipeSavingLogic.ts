@@ -33,7 +33,7 @@ export const useRecipeSavingLogic = (userId?: string) => {
           
           const { error } = await supabase
             .from('recipes')
-            .insert(recipeToSave);
+            .insert([recipeToSave as any]);
 
           if (error) throw error;
           return recipe;

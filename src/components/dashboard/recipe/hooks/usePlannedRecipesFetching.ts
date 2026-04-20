@@ -24,7 +24,7 @@ export const usePlannedRecipesFetching = (selectedChildren: ChildProfile[]) => {
       if (error) throw error;
 
       const plannedRecipeMap: { [key: string]: Recipe | null } = {};
-      data.forEach(plan => {
+      data.forEach((plan: any) => {
         if (plan.recipes) {
           const recipe = plan.recipes;
           plannedRecipeMap[plan.date] = {

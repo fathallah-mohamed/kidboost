@@ -36,7 +36,7 @@ export const FavoriteRecipes = ({ onSectionChange }: FavoriteRecipesProps) => {
 
       if (error) throw error;
 
-      const parsedRecipes: Recipe[] = data.map(recipe => ({
+      const parsedRecipes: Recipe[] = data.map((recipe: any) => ({
         ...recipe,
         ingredients: typeof recipe.ingredients === 'string' 
           ? JSON.parse(recipe.ingredients) 
