@@ -3,10 +3,12 @@ import { useState } from "react";
 import { Recipe, RecipeFilters, ChildProfile } from "@/components/dashboard/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAIProvider } from "@/hooks/useAIProvider";
 
 export const useRecipeGeneration = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { aiProvider } = useAIProvider();
 
   const generateRecipes = async (child: ChildProfile, filters: RecipeFilters) => {
     try {
@@ -58,8 +60,9 @@ export const useRecipeGeneration = () => {
             },
             filters: {
               ...filters,
-              requestId // Ajouter un ID unique pour assurer des résultats différents à chaque appel
-            }
+              requestId
+            },
+            aiProvider
           }
         }
       );
