@@ -452,19 +452,24 @@ export type Database = {
           image_url: string | null
           ingredients: Json
           instructions: string
+          is_batch_cooking: boolean | null
           is_generated: boolean | null
+          is_reuse: boolean | null
           max_age: number | null
           max_prep_time: number
           meal_type: string
           min_age: number | null
           name: string
           nutritional_info: Json
+          original_recipe_id: string | null
           preparation_time: number
           profile_id: string
+          reuse_info: Json | null
           seasonal_months: number[] | null
           seasonality: string[] | null
           servings: number
           source: string | null
+          storage_info: Json | null
           updated_at: string
         }
         Insert: {
@@ -482,19 +487,24 @@ export type Database = {
           image_url?: string | null
           ingredients: Json
           instructions: string
+          is_batch_cooking?: boolean | null
           is_generated?: boolean | null
+          is_reuse?: boolean | null
           max_age?: number | null
           max_prep_time?: number
           meal_type?: string
           min_age?: number | null
           name: string
           nutritional_info: Json
+          original_recipe_id?: string | null
           preparation_time?: number
           profile_id: string
+          reuse_info?: Json | null
           seasonal_months?: number[] | null
           seasonality?: string[] | null
           servings?: number
           source?: string | null
+          storage_info?: Json | null
           updated_at?: string
         }
         Update: {
@@ -512,19 +522,24 @@ export type Database = {
           image_url?: string | null
           ingredients?: Json
           instructions?: string
+          is_batch_cooking?: boolean | null
           is_generated?: boolean | null
+          is_reuse?: boolean | null
           max_age?: number | null
           max_prep_time?: number
           meal_type?: string
           min_age?: number | null
           name?: string
           nutritional_info?: Json
+          original_recipe_id?: string | null
           preparation_time?: number
           profile_id?: string
+          reuse_info?: Json | null
           seasonal_months?: number[] | null
           seasonality?: string[] | null
           servings?: number
           source?: string | null
+          storage_info?: Json | null
           updated_at?: string
         }
         Relationships: [
@@ -533,6 +548,13 @@ export type Database = {
             columns: ["child_id"]
             isOneToOne: false
             referencedRelation: "children_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipes_original_recipe_id_fkey"
+            columns: ["original_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
           {
