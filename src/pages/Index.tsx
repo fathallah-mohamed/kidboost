@@ -6,7 +6,7 @@ import { PremiumTeaser } from '@/components/home/PremiumTeaser';
 import { SEOHead, generateFAQStructuredData, generateHowToStructuredData } from '@/components/seo/SEOHead';
 import { useSession } from "@supabase/auth-helpers-react";
 import { Link } from 'react-router-dom';
-import kidboostLogo from '@/assets/kidboost-logo.png';
+import { Logo } from '@/components/ui/Logo';
 
 // FAQ data for SEO
 const faqData = [
@@ -83,15 +83,8 @@ const Index = () => {
         {/* Header with semantic nav */}
         <header role="banner">
           <nav className="p-4 flex justify-between items-center container mx-auto" aria-label="Navigation principale">
-            <Link to="/" className="flex items-center gap-2" aria-label="Kidboost - Accueil">
-              <img 
-                src={kidboostLogo} 
-                alt="Kidboost - Planificateur de repas pour enfants" 
-                className="h-12 w-auto" 
-                width="48"
-                height="48"
-                loading="eager"
-              />
+            <Link to="/" aria-label="Kidboost - Accueil">
+              <Logo size="md" withText priority />
             </Link>
             <div />
           </nav>
