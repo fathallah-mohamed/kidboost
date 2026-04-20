@@ -132,6 +132,8 @@ export function GenerateMealDialog({
           : "Lunchbox adaptée au régime spécial: repas froid ou tiède, transportable, respecte strictement les restrictions alimentaires"
       } : null;
 
+      const { getAIProvider } = await import("@/lib/ai-provider");
+      const aiProvider = await getAIProvider();
       const { data, error } = await supabase.functions.invoke("generate-daily-meal", {
         body: {
           childId,
@@ -148,7 +150,8 @@ export function GenerateMealDialog({
             parentDifficulty: parentPreferences?.difficulty,
             familyAllergens: parentPreferences?.allergens,
             ...lunchboxContext,
-          }
+          },
+          aiProvider,
         },
       });
 

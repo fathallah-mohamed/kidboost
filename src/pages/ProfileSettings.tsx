@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAIProvider } from "@/hooks/useAIProvider";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -128,6 +130,7 @@ const ProfileSettings = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const session = useSession();
+  const { aiProvider, setAIProvider } = useAIProvider();
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
@@ -1058,6 +1061,47 @@ const ProfileSettings = () => {
               </AccordionContent>
             </AccordionItem>
           </Accordion>
+        </Card>
+
+        {/* Section 6: AI Engine */}
+        <Card className="p-4 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <ChefHat className="w-5 h-5 text-primary" />
+            <h2 className="font-semibold">Moteur d'IA pour les recettes</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Choisissez quelle IA Kidboost utilise pour générer vos recettes.
+          </p>
+          <Select
+            value={aiProvider}
+            onValueChange={async (v) => {
+              await setAIProvider(v as "lovable" | "perplexity");
+              toast.success("Moteur IA mis à jour");
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="lovable">
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Lovable AI (recommandé)</span>
+                  <span className="text-xs text-muted-foreground">Rapide, intégré, aucune configuration</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="perplexity">
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Perplexity</span>
+                  <span className="text-xs text-muted-foreground">Recherche web temps réel — nécessite une connexion Perplexity</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          {aiProvider === "perplexity" && (
+            <p className="mt-3 text-xs text-amber-600">
+              ⚠️ Assurez-vous que la connexion Perplexity est active dans vos intégrations.
+            </p>
+          )}
         </Card>
 
         {/* Footer actions */}

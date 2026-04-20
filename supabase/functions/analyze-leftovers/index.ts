@@ -1,6 +1,4 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,63 +11,54 @@ serve(async (req) => {
   }
 
   try {
-    const { photoUrls, ingredients } = await req.json();
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-
-    if (!openAIApiKey) {
-      throw new Error('OpenAI API key not configured');
+    const { photoUrls = [], ingredients = [] } = await req.json();
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY non configurée');
     }
 
-    console.log('Analyzing photos:', photoUrls);
-    console.log('Known ingredients:', ingredients);
-
-    // Analyze photos with GPT-4 Vision
-    const messages = [
+    const userContent: any[] = [
       {
-        role: 'system',
-        content: 'You are a culinary expert analyzing food ingredients and suggesting recipes.'
+        type: 'text',
+        text: `Je vois ces ingrédients dans mes restes. Peux-tu me suggérer une recette créative pour des enfants ? Voici la liste des ingrédients connus : ${ingredients.join(', ') || 'aucun'}`
       },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `Je vois ces ingrédients dans mes restes. Peux-tu me suggérer une recette créative ? Voici aussi la liste des ingrédients connus : ${ingredients.join(', ')}`
-          },
-          ...photoUrls.map(url => ({
-            type: 'image_url',
-            image_url: url
-          }))
-        ]
-      }
+      ...photoUrls.map((url: string) => ({
+        type: 'image_url',
+        image_url: { url }
+      }))
     ];
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
-        messages,
-        temperature: 0.7,
+        model: 'google/gemini-2.5-pro',
+        messages: [
+          { role: 'system', content: 'Tu es un chef cuisinier expert qui propose des recettes adaptées aux enfants à partir de restes.' },
+          { role: 'user', content: userContent }
+        ],
       }),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to analyze photos');
+      const errorText = await response.text();
+      if (response.status === 429) throw new Error("Trop de requêtes vers Lovable AI, réessayez dans un instant");
+      if (response.status === 402) throw new Error("Crédits Lovable AI insuffisants");
+      throw new Error(`Erreur Lovable AI (${response.status}): ${errorText}`);
     }
 
     const data = await response.json();
-    const suggestion = data.choices[0].message.content;
+    const suggestion = data.choices?.[0]?.message?.content || '';
 
     return new Response(
       JSON.stringify({ suggestion }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error) {
-    console.error('Error:', error);
+  } catch (error: any) {
+    console.error('analyze-leftovers error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }

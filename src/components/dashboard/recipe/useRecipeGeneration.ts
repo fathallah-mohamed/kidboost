@@ -2,18 +2,17 @@ import { useState } from "react";
 import { Recipe, RecipeFilters, ChildProfile } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAIProvider } from "@/hooks/useAIProvider";
 
 export const useRecipeGeneration = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { aiProvider } = useAIProvider();
 
   const generateRecipes = async (child: ChildProfile, filters: RecipeFilters) => {
     try {
       setLoading(true);
       setError(null);
-
-      console.log("Generating recipes for child:", child);
-      console.log("Using filters:", filters);
 
       const { data: response, error: generateError } = await supabase.functions.invoke(
         'generate-recipe',
@@ -27,13 +26,13 @@ export const useRecipeGeneration = () => {
               allergies: child.allergies || [],
               preferences: child.preferences || []
             },
-            filters
+            filters,
+            aiProvider
           }
         }
       );
 
       if (generateError) throw generateError;
-      console.log("Generated recipe response:", response);
 
       if (!response.recipes || !Array.isArray(response.recipes)) {
         throw new Error("Format de réponse invalide");

@@ -247,12 +247,15 @@ export const useDashboardData = (userId: string) => {
     const targetDate = dateStr || format(new Date(), 'yyyy-MM-dd');
 
     try {
+      const { getAIProvider } = await import("@/lib/ai-provider");
+      const aiProvider = await getAIProvider();
       const { data, error } = await supabase.functions.invoke('generate-daily-meal', {
         body: {
           childId: child.id,
           profileId: userId,
           mealType: mealSlot,
           date: targetDate,
+          aiProvider,
         },
       });
 
