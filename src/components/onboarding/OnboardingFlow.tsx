@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { StepName } from './OnboardingStep';
 import { StepIndicator } from './StepIndicator';
 import { NameStep } from './steps/NameStep';
@@ -55,6 +57,17 @@ export const OnboardingFlow = ({ userId, onComplete }: OnboardingFlowProps) => {
   const prevStep = () => {
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
+    }
+  };
+
+  const handleCancelAndLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success('Déconnexion réussie');
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Erreur lors de la déconnexion');
     }
   };
 
@@ -168,6 +181,18 @@ export const OnboardingFlow = ({ userId, onComplete }: OnboardingFlowProps) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
+        <div className="flex justify-end mb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCancelAndLogout}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Annuler et se déconnecter
+          </Button>
+        </div>
+
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
             Bienvenue sur Kiboost ! 🎉
