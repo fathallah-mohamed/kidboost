@@ -120,13 +120,16 @@ export function AddRecipeDialog({
       };
 
       // Call the generate-daily-meal function
+      const { getAIProvider } = await import("@/lib/ai-provider");
+      const aiProvider = await getAIProvider();
       const { data, error } = await supabase.functions.invoke('generate-daily-meal', {
         body: {
           childId,
           profileId: userId,
           mealType: slot,
           date,
-          context
+          context,
+          aiProvider
         }
       });
 

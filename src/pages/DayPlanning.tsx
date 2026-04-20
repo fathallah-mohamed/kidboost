@@ -106,11 +106,14 @@ export default function DayPlanning() {
     setGenerating(mealSlot);
 
     try {
+      const { getAIProvider } = await import("@/lib/ai-provider");
+      const aiProvider = await getAIProvider();
       const { data, error } = await supabase.functions.invoke("generate-daily-meal", {
         body: {
           childId,
           mealType: mealSlot,
           date,
+          aiProvider,
         },
       });
 
