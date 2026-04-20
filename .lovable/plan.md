@@ -1,42 +1,80 @@
 
 
-# Plan : Corriger Google OAuth + bouton déconnexion sur l'onboarding
+# Plan : Améliorer le logo Kidboost dans tout le site
 
-## Problème 1 — Google ramène à l'écran login
+## Problème
+Le logo PNG actuel (`src/assets/kidboost-logo.png`) :
+- A un fond semi-transparent qui rend mal sur le fond cream `#FFF5E4` (effet damier visible)
+- Aucun favicon dédié (utilise l'ancien `favicon.ico` générique)
+- Pas de version optimisée pour petites tailles (header, mobile)
 
-La page revient au formulaire login parce que :
-- `redirect_uri` est fixé à `${window.location.origin}/dashboard` au lieu de `window.location.origin` (recommandé par Lovable Cloud Managed OAuth).
-- Le code après `result.redirected` essaie quand même de naviguer, ce qui peut créer un état incohérent.
+## Solution
 
-Les logs auth confirment que Google fonctionne **sur l'URL publiée** (`kidboost.lovable.app`) — le souci est en preview/dev, où le `redirect_uri` doit pointer vers la racine pour que le proxy OAuth fasse correctement l'échange de tokens.
+### 1. Conteneur "badge" blanc autour du logo
+Créer un composant réutilisable `src/components/ui/Logo.tsx` qui affiche le logo dans un conteneur blanc arrondi avec ombre douce — garantit un rendu propre quel que soit le fond.
 
-### Correctifs `src/components/auth/AuthForm.tsx`
-- Changer `redirect_uri: \`${window.location.origin}/dashboard\`` → `redirect_uri: window.location.origin`
-- Après `result.redirected === true` → faire `return` simple (pas de navigation manuelle)
-- Après tokens reçus → `window.location.href = '/'` (le router redirigera vers `/dashboard` si session active)
-
-## Problème 2 — Pas de moyen de quitter l'onboarding
-
-Quand un utilisateur se connecte sans avoir configuré d'enfant, il est piégé sur l'écran d'onboarding sans bouton de déconnexion ni de retour.
-
-### Correctifs `src/components/onboarding/OnboardingFlow.tsx`
-- Ajouter un header en haut avec :
-  - Bouton **"Annuler et se déconnecter"** (icône `LogOut`) en haut à droite
-  - Action : `await supabase.auth.signOut()` puis `navigate('/login')`
-- Toast de confirmation "Déconnexion réussie"
-- Style discret (variant ghost) pour ne pas concurrencer les CTA principaux
-
-## Vérification post-changement
-
-```text
-1. Preview → "Continuer avec Google" → choix compte → arrive sur /dashboard ✓
-2. Login email/pass nouveau compte → onboarding → bouton "Annuler" → /login ✓
-3. Login → onboarding → compléter → /dashboard ✓
-4. Mot de passe oublié → email → /reset-password → nouveau mdp → login ✓
+```tsx
+<Logo size="sm|md|lg" withText={true} />
+// → <div class="bg-white rounded-2xl p-2 shadow-sm">
+//     <img src={kidboostLogo} ... />
+//   </div>
 ```
 
-## Notes techniques
+Variantes :
+- `sm` (h-8) → headers compacts
+- `md` (h-12) → header principal, auth
+- `lg` (h-20) → hero, splash
 
-- Le proxy OAuth Lovable nécessite `redirect_uri = origin` pour que `/~oauth/callback` intercepte correctement.
-- Si Google échoue toujours en preview après le fix, c'est un problème d'allowlist du domaine preview côté Cloud — auquel cas tester sur `kidboost.lovable.app` (publié) confirmera que le code est bon (les logs montrent déjà des logins Google réussis sur l'URL publiée).
+### 2. Remplacer toutes les occurrences
+Mettre à jour les 4 fichiers utilisant le logo pour utiliser `<Logo />` :
+- `src/pages/Index.tsx` (hero + header)
+- `src/pages/Auth.tsx`
+- `src/components/auth/AuthForm.tsx`
+- `src/components/dashboard/layout/DashboardHeader.tsx`
+
+### 3. Favicon + icônes
+- Copier le logo source vers `public/` puis générer plusieurs tailles via un script Node (sharp) :
+  - `public/favicon-32.png` (32×32)
+  - `public/favicon-16.png` (16×16)
+  - `public/apple-touch-icon.png` (180×180, fond blanc carré)
+  - `public/favicon.svg` (version vectorielle simplifiée si possible, sinon PNG)
+- Supprimer l'ancien `public/favicon.ico`
+- Mettre à jour `index.html` :
+  ```html
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  ```
+- `theme-color` : passer de `#FF6B35` à `#FFF5E4` (cohérent avec le fond app) ou garder l'orange (à confirmer — je garde orange car ça matche la mascotte).
+
+### 4. Manifest PWA léger
+Créer `public/site.webmanifest` minimal pour que l'icône s'affiche bien quand on ajoute Kidboost à l'écran d'accueil mobile (cas du screenshot fourni où l'utilisateur est sur Android).
+
+### 5. Harmonisation visuelle
+- Tous les logos passent par le composant `<Logo />` → uniformité (taille, espacement, ombre, badge blanc)
+- Animation `hover-scale` discrète sur les logos cliquables (header)
+- Alt text cohérent : `"Kidboost - Planificateur de repas pour enfants"`
+
+## Fichiers touchés
+
+**Créés :**
+- `src/components/ui/Logo.tsx`
+- `public/favicon-16.png`, `public/favicon-32.png`, `public/apple-touch-icon.png`
+- `public/site.webmanifest`
+
+**Modifiés :**
+- `index.html` (liens favicon + manifest)
+- `src/pages/Index.tsx`
+- `src/pages/Auth.tsx`
+- `src/components/auth/AuthForm.tsx`
+- `src/components/dashboard/layout/DashboardHeader.tsx`
+
+**Supprimé :**
+- `public/favicon.ico`
+
+## Vérification
+1. Page d'accueil → logo dans badge blanc, net, sans damier
+2. Onglet navigateur → favicon Kidboost visible (pas le générique)
+3. Mobile Android → ajout à l'écran d'accueil utilise l'icône carrée blanche avec mascotte
+4. Dashboard, Auth, Index → logo cohérent partout
 
