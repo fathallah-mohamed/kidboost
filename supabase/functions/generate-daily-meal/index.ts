@@ -20,9 +20,10 @@ serve(async (req) => {
       date, 
       context, 
       busyParentMode = true,
-      // Nouvelles préférences de planification
-      planningPreferences
+      planningPreferences,
+      aiProvider
     } = await req.json();
+    const provider: 'lovable' | 'perplexity' = aiProvider === 'perplexity' ? 'perplexity' : 'lovable';
     
     console.log("generate-daily-meal - Request:", { childId, profileId, mealType, date, context, busyParentMode, planningPreferences });
 
