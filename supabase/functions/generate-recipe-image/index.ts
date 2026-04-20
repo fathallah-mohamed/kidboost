@@ -90,6 +90,17 @@ Couleurs vives et naturelles, texture détaillée des aliments. Pas de texte, pa
     const imageUrl = publicUrlData.publicUrl;
     console.log('Image stored at:', imageUrl);
 
+    // If recipeId is a valid UUID, persist the URL on the recipe row
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (recipeId && uuidRegex.test(recipeId)) {
+      const { error: updateErr } = await supabaseAdmin
+        .from('recipes')
+        .update({ image_url: imageUrl })
+        .eq('id', recipeId);
+      if (updateErr) console.warn('Recipe image_url update failed:', updateErr);
+      else console.log('Recipe image_url persisted for', recipeId);
+    }
+
     return new Response(
       JSON.stringify({ imageUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
